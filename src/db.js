@@ -3,6 +3,35 @@ const path = require('path');
 const crypto = require('crypto');
 const { DATA_DIR, BASE_URL } = require('./config');
 
+const DEFAULT_QR_CODES = [
+  {
+    id: 'qr-sample-1',
+    slug: 'website',
+    title: 'Company Official Website',
+    destinationUrl: 'https://github.com',
+    active: true,
+    tags: ['Marketing', 'Official'],
+    style: { fgColor: '#1e293b', bgColor: '#ffffff', errorCorrectionLevel: 'H', margin: 2 },
+    totalScans: 4,
+    uniqueVisitors: 3,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'qr-sample-2',
+    slug: 'promo26',
+    title: 'Product Launch Promo 2026',
+    destinationUrl: 'https://news.ycombinator.com',
+    active: true,
+    tags: ['Campaign', 'Sale'],
+    style: { fgColor: '#0f766e', bgColor: '#f0fdfa', errorCorrectionLevel: 'Q', margin: 2 },
+    totalScans: 2,
+    uniqueVisitors: 2,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
+
 class Database {
   constructor() {
     this.dataDir = DATA_DIR;
@@ -47,7 +76,10 @@ class Database {
       });
     }
 
-    this.qrCodes = this._loadFile(this.qrCodesFile, []);
+    this.qrCodes = this._loadFile(this.qrCodesFile, DEFAULT_QR_CODES);
+    if (!this.qrCodes || this.qrCodes.length === 0) {
+      this.qrCodes = [...DEFAULT_QR_CODES];
+    }
     this.scans = this._loadFile(this.scansFile, []);
     this.settings = this._loadFile(this.settingsFile, this.settings);
 
@@ -71,6 +103,10 @@ class Database {
 
   _saveFile(filePath, data) {
     try {
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
       const tempPath = `${filePath}.tmp.${Date.now()}`;
       fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf8');
       fs.renameSync(tempPath, filePath);

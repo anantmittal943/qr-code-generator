@@ -22,10 +22,15 @@ app.use('/r', redirectRouter);
 // REST API
 app.use('/api', apiRouter);
 
+const fs = require('fs');
+
 // Fallback for SPA routing
 app.use((req, res, next) => {
   if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/r')) {
-    return res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+    const indexPath = path.join(__dirname, '..', 'public', 'index.html');
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    }
   }
   next();
 });
