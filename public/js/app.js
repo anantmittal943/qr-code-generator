@@ -250,6 +250,23 @@ async function loadQRCodesList() {
     container.innerHTML = data.items.map(qr => {
       const shortUrl = qr.shortUrl || `${window.location.origin}/r/${qr.slug}`;
       const isActive = qr.active !== false;
+      const isExpired = Boolean(qr.expiresAt && new Date(qr.expiresAt).getTime() <= Date.now());
+
+      let statusBadge = '';
+      if (isExpired) {
+        statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">Expired</span>`;
+      } else if (!isActive) {
+        statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">Paused</span>`;
+      } else {
+        statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>`;
+      }
+
+      const expiryBadge = qr.expiresAt ? `
+        <div class="text-[11px] ${isExpired ? 'text-rose-400 font-medium' : 'text-slate-400'} flex items-center space-x-1">
+          <i data-lucide="clock" class="w-3 h-3"></i>
+          <span>${isExpired ? 'Expired:' : 'Expires:'} ${new Date(qr.expiresAt).toLocaleString()}</span>
+        </div>
+      ` : '';
 
       return `
         <div class="bg-slate-900 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-4 transition-all flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
@@ -261,9 +278,7 @@ async function loadQRCodesList() {
             <div class="min-w-0 space-y-1">
               <div class="flex items-center space-x-2">
                 <span class="font-bold text-sm text-white truncate max-w-[220px] sm:max-w-xs">${escapeHtml(qr.title)}</span>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${isActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}">
-                  ${isActive ? 'Active' : 'Paused'}
-                </span>
+                ${statusBadge}
               </div>
               <div class="flex items-center space-x-2 text-xs">
                 <span class="text-indigo-400 font-mono font-medium">${shortUrl}</span>
@@ -278,6 +293,7 @@ async function loadQRCodesList() {
                 <span>&rarr; Destination:</span>
                 <a href="${escapeHtml(qr.destinationUrl)}" target="_blank" class="text-slate-300 hover:underline truncate">${escapeHtml(qr.destinationUrl)}</a>
               </div>
+              ${expiryBadge}
             </div>
           </div>
 
@@ -364,7 +380,8 @@ async function handleCreateQR(e) {
   const fgColor = document.getElementById('create-fg').value;
   const bgColor = document.getElementById('create-bg').value;
   const errorCorrectionLevel = document.getElementById('create-ecl').value;
-  const expiresAt = document.getElementById('create-expires').value || null;
+  const expiresVal = document.getElementById('create-expires').value;
+  const expiresAt = expiresVal ? new Date(expiresVal).toISOString() : null;
 
   try {
     const res = await fetch('/api/qr', {
@@ -423,6 +440,19 @@ async function confirmDeleteQR(id) {
   }
 }
 
+function formatDateTimeLocal(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 // --- Edit QR Modal ---
 
 async function openEditModal(id) {
@@ -436,6 +466,7 @@ async function openEditModal(id) {
     document.getElementById('edit-qr-destination').value = qr.destinationUrl || '';
     document.getElementById('edit-qr-active').value = qr.active !== false ? 'true' : 'false';
     document.getElementById('edit-qr-tags').value = (qr.tags || []).join(', ');
+    document.getElementById('edit-qr-expires').value = formatDateTimeLocal(qr.expiresAt);
 
     openModal('modal-edit-qr');
   } catch (err) {
@@ -450,12 +481,14 @@ async function handleUpdateQR(e) {
   const destinationUrl = document.getElementById('edit-qr-destination').value.trim();
   const active = document.getElementById('edit-qr-active').value === 'true';
   const tags = document.getElementById('edit-qr-tags').value.trim();
+  const expiresVal = document.getElementById('edit-qr-expires').value;
+  const expiresAt = expiresVal ? new Date(expiresVal).toISOString() : null;
 
   try {
     const res = await fetch(`/api/qr/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, destinationUrl, active, tags })
+      body: JSON.stringify({ title, destinationUrl, active, tags, expiresAt })
     });
 
     if (!res.ok) {

@@ -48,11 +48,11 @@ class RedirectService {
 
     if (qr.expiresAt) {
       const expiry = new Date(qr.expiresAt);
-      if (expiry.getTime() < Date.now()) {
+      if (!isNaN(expiry.getTime()) && expiry.getTime() <= Date.now()) {
         return {
           status: 'expired',
           qr,
-          message: 'This QR code campaign has expired.'
+          message: 'This dynamic QR campaign has reached its expiration date.'
         };
       }
     }

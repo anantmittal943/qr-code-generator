@@ -113,13 +113,19 @@ router.post('/qr', async (req, res) => {
       return res.status(400).json({ error: 'Invalid destination URL format.' });
     }
 
+    let parsedExpires = null;
+    if (expiresAt) {
+      const d = new Date(expiresAt);
+      if (!isNaN(d.getTime())) parsedExpires = d.toISOString();
+    }
+
     const qr = await db.createQRCode({
       destinationUrl: normUrl,
       title: title || undefined,
       slug: slug || undefined,
       tags,
       style,
-      expiresAt,
+      expiresAt: parsedExpires,
       active
     });
 
@@ -156,6 +162,15 @@ router.put('/qr/:id', async (req, res) => {
         return res.status(400).json({ error: 'Invalid destination URL format.' });
       }
       updates.destinationUrl = normUrl;
+    }
+
+    if (updates.expiresAt !== undefined) {
+      if (updates.expiresAt) {
+        const d = new Date(updates.expiresAt);
+        updates.expiresAt = !isNaN(d.getTime()) ? d.toISOString() : null;
+      } else {
+        updates.expiresAt = null;
+      }
     }
 
     const updated = await db.updateQRCode(req.params.id, updates);

@@ -108,26 +108,54 @@ async function runTests() {
       throw new Error(`Redirection did not update dynamically: ${updatedRedirectRes.headers.location}`);
     }
 
-    // 8. Test Bulk Creation via Multi-line Text
+    // 8. Test Campaign Expiration
+    const pastDate = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const expireUpdateRes = await request(`/api/qr/${createdQR.id}`, { method: 'PUT' }, {
+      expiresAt: pastDate
+    });
+    console.log(`[Test 9] PUT expiresAt in past: status=${expireUpdateRes.statusCode}`);
+    if (expireUpdateRes.statusCode !== 200) throw new Error('Failed to set expiration');
+
+    const expiredRedirectRes = await request(`/r/${testSlug}`);
+    console.log(`[Test 10] GET /r/${testSlug} when expired: status=${expiredRedirectRes.statusCode}`);
+    if (expiredRedirectRes.statusCode !== 410) {
+      throw new Error(`Expected HTTP 410 for expired campaign, got ${expiredRedirectRes.statusCode}`);
+    }
+    if (!expiredRedirectRes.text().includes('Campaign Expired') && !expiredRedirectRes.text().includes('Expired')) {
+      throw new Error('Expired page did not contain expected expiration message');
+    }
+
+    // Clear expiration (re-activate)
+    const clearExpireRes = await request(`/api/qr/${createdQR.id}`, { method: 'PUT' }, {
+      expiresAt: null
+    });
+    console.log(`[Test 11] PUT clear expiresAt: status=${clearExpireRes.statusCode}`);
+    const unexpiredRedirectRes = await request(`/r/${testSlug}`);
+    console.log(`[Test 12] GET /r/${testSlug} after clearing expiration: status=${unexpiredRedirectRes.statusCode}`);
+    if (unexpiredRedirectRes.statusCode !== 302) {
+      throw new Error(`Expected HTTP 302 after clearing expiration, got ${unexpiredRedirectRes.statusCode}`);
+    }
+
+    // 9. Test Bulk Creation via Multi-line Text
     const bulkRes = await request('/api/bulk/create', { method: 'POST' }, {
       text: "Bulk Campaign 1 | https://site1.com | bulk1\nBulk Campaign 2 | https://site2.com | bulk2"
     });
-    console.log(`[Test 9] POST /api/bulk/create: status=${bulkRes.statusCode}`);
+    console.log(`[Test 13] POST /api/bulk/create: status=${bulkRes.statusCode}`);
     const bulkData = bulkRes.json();
     console.log(`         Successfully created: ${bulkData.successCount} of ${bulkData.total}`);
     if (bulkData.successCount !== 2) throw new Error('Bulk creation failed');
 
-    // 9. Test Bulk ZIP Export
+    // 10. Test Bulk ZIP Export
     const zipRes = await request('/api/bulk/export?format=all');
-    console.log(`[Test 10] GET /api/bulk/export: status=${zipRes.statusCode}, bytes=${zipRes.body.length}`);
+    console.log(`[Test 14] GET /api/bulk/export: status=${zipRes.statusCode}, bytes=${zipRes.body.length}`);
     if (zipRes.statusCode !== 200 || zipRes.body.length < 100) throw new Error('ZIP export failed');
 
-    // 10. Clean up test QR
+    // 11. Clean up test QR
     const delRes = await request(`/api/qr/${createdQR.id}`, { method: 'DELETE' });
-    console.log(`[Test 11] DELETE test QR: status=${delRes.statusCode}`);
+    console.log(`[Test 15] DELETE test QR: status=${delRes.statusCode}`);
     if (delRes.statusCode !== 200) throw new Error('Delete failed');
 
-    console.log('\n✅ ALL AUTOMATED TESTS PASSED SUCCESSFULLY! Everything is working cleanly.\n');
+    console.log('\n✅ ALL 15 AUTOMATED TESTS PASSED SUCCESSFULLY! Campaign expiration and all features verified.\n');
   } catch (err) {
     console.error('❌ Test failed:', err);
     process.exit(1);
