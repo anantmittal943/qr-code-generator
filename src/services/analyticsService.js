@@ -4,16 +4,28 @@ class AnalyticsService {
   /**
    * Generates summary statistics and chart data for the admin overview
    */
-  getOverviewMetrics() {
-    const stats = db.getOverviewStats();
-    const allScans = db.getAllScans({ limit: 5000 });
-    const { items: allQRs } = db.getQRCodes({ sort: 'totalScans', order: 'desc', limit: 5 });
+  async getOverviewMetrics() {
+    const stats = await db.getOverviewStats();
+    const allScans = await db.getAllScans({ limit: 5000 });
+    const { items: allQRs } = await db.getQRCodes({ sort: 'totalScans', order: 'desc', limit: 5 });
 
     const timeline = this._calculateTimeline(allScans, 14);
     const devices = this._aggregateProperty(allScans, 'device');
     const browsers = this._aggregateProperty(allScans, 'browser');
     const oses = this._aggregateProperty(allScans, 'os');
     const referrers = this._aggregateProperty(allScans, 'referrer');
+
+    // Fetch QR titles for recent scans in parallel
+    const recentScansRaw = allScans.slice(0, 15);
+    const recentScans = await Promise.all(
+      recentScansRaw.map(async s => {
+        const qr = await db.getQRCodeById(s.qrCodeId);
+        return {
+          ...s,
+          qrTitle: qr ? qr.title : s.slug
+        };
+      })
+    );
 
     return {
       stats,
@@ -31,24 +43,18 @@ class AnalyticsService {
       browsers,
       oses,
       referrers,
-      recentScans: allScans.slice(0, 15).map(s => {
-        const qr = db.getQRCodeById(s.qrCodeId);
-        return {
-          ...s,
-          qrTitle: qr ? qr.title : s.slug
-        };
-      })
+      recentScans
     };
   }
 
   /**
    * Generates analytics for a specific QR Code
    */
-  getQRAnalytics(qrCodeId) {
-    const qr = db.getQRCodeById(qrCodeId);
+  async getQRAnalytics(qrCodeId) {
+    const qr = await db.getQRCodeById(qrCodeId);
     if (!qr) return null;
 
-    const scans = db.getScansByQRCodeId(qrCodeId, { limit: 1000 });
+    const scans = await db.getScansByQRCodeId(qrCodeId, { limit: 1000 });
     const timeline = this._calculateTimeline(scans, 14);
     const devices = this._aggregateProperty(scans, 'device');
     const browsers = this._aggregateProperty(scans, 'browser');

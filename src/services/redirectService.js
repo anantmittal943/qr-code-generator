@@ -26,10 +26,10 @@ class RedirectService {
   }
 
   /**
-   * Processes a redirection request
+   * Processes a redirection request (async — DB calls are awaited)
    */
-  processRedirect(slug, req) {
-    const qr = db.getQRCodeBySlug(slug);
+  async processRedirect(slug, req) {
+    const qr = await db.getQRCodeBySlug(slug);
 
     if (!qr) {
       return {
@@ -57,7 +57,7 @@ class RedirectService {
       }
     }
 
-    // Process scan analytics asynchronously
+    // Process scan analytics asynchronously (fire-and-forget)
     const rawIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1').split(',')[0].trim();
     const userAgent = req.headers['user-agent'] || '';
     const referrer = this.parseReferrer(req.headers['referer'] || req.headers['referrer']);
@@ -76,22 +76,18 @@ class RedirectService {
       console.warn('[RedirectService] UA parse warning:', err.message);
     }
 
-    // Log scan to DB (non-blocking)
-    setImmediate(() => {
-      try {
-        db.recordScan({
-          qrCodeId: qr.id,
-          slug: qr.slug,
-          ipHash: this.hashIP(rawIp),
-          userAgent,
-          device,
-          browser,
-          os,
-          referrer
-        });
-      } catch (err) {
-        console.error('[RedirectService] Failed to record scan:', err.message);
-      }
+    // Log scan to DB (non-blocking, fire-and-forget via Promise)
+    db.recordScan({
+      qrCodeId: qr.id,
+      slug: qr.slug,
+      ipHash: this.hashIP(rawIp),
+      userAgent,
+      device,
+      browser,
+      os,
+      referrer
+    }).catch(err => {
+      console.error('[RedirectService] Failed to record scan:', err.message);
     });
 
     return {

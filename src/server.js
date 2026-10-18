@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const { PORT, BASE_URL } = require('./config');
 const db = require('./db');
 const apiRouter = require('./routes/api');
@@ -8,124 +9,119 @@ const redirectRouter = require('./routes/redirect');
 
 const app = express();
 
-// Middlewares
+// ─── Core Middlewares ────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static Assets (Dashboard SPA)
+// ─── DB Init Middleware (MUST come before routes) ────────────────────────────
+// Ensures the DB is connected on the first request.  Subsequent calls resolve
+// instantly because getDB() caches the MongoClient.
+let _initPromise = null;
+app.use(async (req, res, next) => {
+  try {
+    if (!_initPromise) _initPromise = db.init();
+    await _initPromise;
+    next();
+  } catch (err) {
+    console.error('[Server] DB init failed:', err.message);
+    res.status(503).json({
+      error: 'Database unavailable. Check MONGODB_URI environment variable.',
+      detail: err.message,
+    });
+  }
+});
+
+// ─── Static Assets (served directly from /public on local; Vercel CDN in prod) ─
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Redirection Engine
+// ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/r', redirectRouter);
-
-// REST API
 app.use('/api', apiRouter);
 
-const fs = require('fs');
-
-// Fallback for SPA routing
+// ─── SPA Fallback ────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
   if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/r')) {
     const indexPath = path.join(__dirname, '..', 'public', 'index.html');
-    if (fs.existsSync(indexPath)) {
-      return res.sendFile(indexPath);
-    }
+    if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
   }
   next();
 });
 
-// Global Error Handler
-app.use((err, req, res, next) => {
-  console.error('[Server Error]', err);
+// ─── Global Error Handler ────────────────────────────────────────────────────
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  console.error('[Server Error]', err.message);
   res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
-// Lazy database initialization for serverless environments (like Vercel)
-let initPromise = null;
-function ensureInitialized() {
-  if (!initPromise) {
-    initPromise = db.init();
-  }
-  return initPromise;
-}
-
-app.use(async (req, res, next) => {
+// ─── Seed helper ─────────────────────────────────────────────────────────────
+async function seedIfEmpty() {
   try {
-    await ensureInitialized();
-    next();
-  } catch (err) {
-    next(err);
-  }
-});
+    const result = db.getQRCodes({ limit: 1 });
+    const { total } = result && typeof result.then === 'function'
+      ? await result
+      : result;
 
-// Bootstrap & Seed Initial Data if empty
-async function bootstrap(startListener = true) {
-  await ensureInitialized();
+    if (total > 0) return;
 
-  const { total } = db.getQRCodes();
-  if (total === 0) {
-    console.log('[Server] Seeding initial sample dynamic QR codes...');
-    const qr1 = db.createQRCode({
-      title: 'Company Official Website',
-      destinationUrl: 'https://github.com',
-      slug: 'website',
-      tags: ['Marketing', 'Official'],
-      style: { fgColor: '#1e293b', bgColor: '#ffffff', errorCorrectionLevel: 'H' }
-    });
+    console.log('[Server] Seeding initial sample QR codes…');
 
-    const qr2 = db.createQRCode({
-      title: 'Product Launch Promo 2026',
-      destinationUrl: 'https://news.ycombinator.com',
-      slug: 'promo26',
-      tags: ['Campaign', 'Sale'],
-      style: { fgColor: '#0f766e', bgColor: '#f0fdfa', errorCorrectionLevel: 'Q' }
-    });
+    const qrData = [
+      { title: 'Company Official Website', destinationUrl: 'https://github.com',          slug: 'website', tags: ['Marketing', 'Official'], style: { fgColor: '#1e293b', bgColor: '#ffffff', errorCorrectionLevel: 'H' } },
+      { title: 'Product Launch Promo 2026', destinationUrl: 'https://news.ycombinator.com', slug: 'promo26', tags: ['Campaign', 'Sale'],      style: { fgColor: '#0f766e', bgColor: '#f0fdfa', errorCorrectionLevel: 'Q' } },
+      { title: 'Customer Feedback Survey', destinationUrl: 'https://google.com',            slug: 'survey',  tags: ['Support', 'Feedback'],   style: { fgColor: '#7c3aed', bgColor: '#ffffff', errorCorrectionLevel: 'M' } },
+    ];
 
-    const qr3 = db.createQRCode({
-      title: 'Customer Feedback Survey',
-      destinationUrl: 'https://google.com',
-      slug: 'survey',
-      tags: ['Support', 'Feedback'],
-      style: { fgColor: '#7c3aed', bgColor: '#ffffff', errorCorrectionLevel: 'M' }
-    });
+    const created = [];
+    for (const d of qrData) {
+      const qr = db.createQRCode(d);
+      created.push(typeof qr.then === 'function' ? await qr : qr);
+    }
 
     const seedScans = [
-      { device: 'mobile', browser: 'Safari', os: 'iOS', referrer: 'instagram.com' },
-      { device: 'mobile', browser: 'Chrome Mobile', os: 'Android', referrer: 'Direct' },
-      { device: 'desktop', browser: 'Chrome', os: 'Windows', referrer: 'Direct' },
-      { device: 'desktop', browser: 'Firefox', os: 'macOS', referrer: 'google.com' },
-      { device: 'tablet', browser: 'Safari', os: 'iOS', referrer: 'twitter.com' },
-      { device: 'mobile', browser: 'Chrome Mobile', os: 'Android', referrer: 'Direct' }
+      { device: 'mobile',  browser: 'Safari',       os: 'iOS',     referrer: 'instagram.com' },
+      { device: 'mobile',  browser: 'Chrome Mobile', os: 'Android', referrer: 'Direct'        },
+      { device: 'desktop', browser: 'Chrome',        os: 'Windows', referrer: 'Direct'        },
+      { device: 'desktop', browser: 'Firefox',       os: 'macOS',   referrer: 'google.com'    },
+      { device: 'tablet',  browser: 'Safari',        os: 'iOS',     referrer: 'twitter.com'   },
+      { device: 'mobile',  browser: 'Chrome Mobile', os: 'Android', referrer: 'Direct'        },
     ];
 
     for (let i = 0; i < seedScans.length; i++) {
       const scan = seedScans[i];
-      const targetQR = (i % 2 === 0) ? qr1 : (i % 3 === 0 ? qr2 : qr3);
-      db.recordScan({
-        qrCodeId: targetQR.id,
-        slug: targetQR.slug,
-        ipHash: `ip-hash-${i}`,
-        userAgent: `Sample Agent ${i}`,
-        device: scan.device,
-        browser: scan.browser,
-        os: scan.os,
-        referrer: scan.referrer
+      const target = created[i % created.length];
+      const rec = db.recordScan({
+        qrCodeId: target.id,
+        slug:     target.slug,
+        ipHash:   `seed-${i}`,
+        userAgent: `Seed Agent/${i}`,
+        device:   scan.device,
+        browser:  scan.browser,
+        os:       scan.os,
+        referrer: scan.referrer,
       });
+      if (rec && typeof rec.then === 'function') await rec;
     }
+  } catch (err) {
+    console.warn('[Server] Seeding skipped:', err.message);
   }
+}
 
-  if (!startListener) {
-    return null;
-  }
+// ─── Bootstrap (used by local dev + test runner) ─────────────────────────────
+async function bootstrap(startListener = true) {
+  if (!_initPromise) _initPromise = db.init();
+  await _initPromise;
+  await seedIfEmpty();
+
+  if (!startListener) return null;
 
   const server = app.listen(PORT, () => {
-    console.log(`=======================================================`);
-    console.log(`🚀 Dynamic QR Code Generator Server is live!`);
-    console.log(`📡 Dashboard UI:   http://localhost:${PORT}`);
-    console.log(`🔀 Redirection:   ${BASE_URL}/r/<slug>`);
-    console.log(`⚡ API Endpoints:  http://localhost:${PORT}/api`);
-    console.log(`=======================================================`);
+    console.log('=======================================================');
+    console.log('🚀 Dynamic QR Studio is live!');
+    console.log(`📡 Dashboard:    http://localhost:${PORT}`);
+    console.log(`🔀 Redirects:    ${BASE_URL}/r/<slug>`);
+    console.log(`⚡ API:          http://localhost:${PORT}/api`);
+    console.log('=======================================================');
   });
 
   return server;

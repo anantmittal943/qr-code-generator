@@ -30,39 +30,49 @@ function renderStatusPage(title, headline, message, iconColor = '#ef4444') {
 </html>`;
 }
 
-router.get('/:slug', (req, res) => {
-  const { slug } = req.params;
-  const result = redirectService.processRedirect(slug, req);
+router.get('/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const result = await redirectService.processRedirect(slug, req);
 
-  if (result.status === 'ok') {
-    return res.redirect(302, result.destinationUrl);
-  }
+    if (result.status === 'ok') {
+      return res.redirect(302, result.destinationUrl);
+    }
 
-  if (result.status === 'inactive') {
-    return res.status(403).send(renderStatusPage(
-      'QR Code Paused',
-      'QR Code Currently Paused',
-      result.message || 'This dynamic QR code destination is currently paused by its administrator. Please check back later.',
-      '#f59e0b'
+    if (result.status === 'inactive') {
+      return res.status(403).send(renderStatusPage(
+        'QR Code Paused',
+        'QR Code Currently Paused',
+        result.message || 'This dynamic QR code destination is currently paused by its administrator. Please check back later.',
+        '#f59e0b'
+      ));
+    }
+
+    if (result.status === 'expired') {
+      return res.status(410).send(renderStatusPage(
+        'Campaign Expired',
+        'QR Code Expired',
+        result.message || 'This dynamic QR campaign has reached its expiration date.',
+        '#ef4444'
+      ));
+    }
+
+    // Not found
+    return res.status(404).send(renderStatusPage(
+      'Not Found',
+      'QR Code Not Found',
+      'The QR code or redirection link you scanned does not exist or has been removed.',
+      '#64748b'
     ));
-  }
-
-  if (result.status === 'expired') {
-    return res.status(410).send(renderStatusPage(
-      'Campaign Expired',
-      'QR Code Expired',
-      result.message || 'This dynamic QR campaign has reached its expiration date.',
+  } catch (err) {
+    console.error('[redirect] Error processing redirect:', err.message);
+    return res.status(500).send(renderStatusPage(
+      'Error',
+      'Something Went Wrong',
+      'An unexpected error occurred. Please try again later.',
       '#ef4444'
     ));
   }
-
-  // Not found
-  return res.status(404).send(renderStatusPage(
-    'Not Found',
-    'QR Code Not Found',
-    'The QR code or redirection link you scanned does not exist or has been removed.',
-    '#64748b'
-  ));
 });
 
 module.exports = router;

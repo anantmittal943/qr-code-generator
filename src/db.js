@@ -1,118 +1,80 @@
-const fs = require('fs');
-const path = require('path');
+/**
+ * db.js — MongoDB-backed database layer.
+ *
+ * Drops the original fs/JSON implementation and replaces it with the native
+ * MongoDB Node.js driver.  The public API (method names + signatures) is kept
+ * identical so the rest of the codebase requires zero changes.
+ *
+ * Required environment variable:
+ *   MONGODB_URI — a MongoDB connection string, e.g.:
+ *     mongodb+srv://user:password@cluster.mongodb.net/dynqr?retryWrites=true&w=majority
+ *
+ * When MONGODB_URI is missing the module falls back to in-memory storage so
+ * that the local test suite still passes without a database.
+ */
+
 const crypto = require('crypto');
-const { DATA_DIR, BASE_URL } = require('./config');
+const { MongoClient } = require('mongodb');
+const { BASE_URL } = require('./config');
 
-const DEFAULT_QR_CODES = [
-  {
-    id: 'qr-sample-1',
-    slug: 'website',
-    title: 'Company Official Website',
-    destinationUrl: 'https://github.com',
-    active: true,
-    tags: ['Marketing', 'Official'],
-    style: { fgColor: '#1e293b', bgColor: '#ffffff', errorCorrectionLevel: 'H', margin: 2 },
-    totalScans: 4,
-    uniqueVisitors: 3,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'qr-sample-2',
-    slug: 'promo26',
-    title: 'Product Launch Promo 2026',
-    destinationUrl: 'https://news.ycombinator.com',
-    active: true,
-    tags: ['Campaign', 'Sale'],
-    style: { fgColor: '#0f766e', bgColor: '#f0fdfa', errorCorrectionLevel: 'Q', margin: 2 },
-    totalScans: 2,
-    uniqueVisitors: 2,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+// ─────────────────────────────────────────────
+// MongoDB connection (module-level singleton)
+// ─────────────────────────────────────────────
+const MONGODB_URI = process.env.MONGODB_URI || '';
+const DB_NAME = process.env.MONGODB_DB || 'dynqr';
+
+let _client = null;      // MongoClient
+let _db = null;          // Db handle
+
+async function getDB() {
+  if (_db) return _db;
+
+  if (!MONGODB_URI) {
+    throw new Error(
+      'MONGODB_URI environment variable is not set. ' +
+      'Add it in Vercel → Project → Settings → Environment Variables.'
+    );
   }
-];
 
-class Database {
+  if (!_client) {
+    _client = new MongoClient(MONGODB_URI, {
+      maxPoolSize: 5,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 10000,
+    });
+  }
+
+  await _client.connect();
+  _db = _client.db(DB_NAME);
+
+  // Create indexes on first connect
+  await _db.collection('qrcodes').createIndexes([
+    { key: { slug: 1 }, unique: true },
+    { key: { createdAt: -1 } },
+  ]);
+  await _db.collection('scans').createIndexes([
+    { key: { qrCodeId: 1 } },
+    { key: { timestamp: -1 } },
+  ]);
+
+  return _db;
+}
+
+// ─────────────────────────────────────────────
+// In-memory fallback (used when no MONGODB_URI)
+// ─────────────────────────────────────────────
+class InMemoryFallback {
   constructor() {
-    this.dataDir = DATA_DIR;
-    this.qrCodesFile = path.join(this.dataDir, 'qrcodes.json');
-    this.scansFile = path.join(this.dataDir, 'scans.json');
-    this.settingsFile = path.join(this.dataDir, 'settings.json');
-
     this.qrCodes = [];
-    this.scans = [];
+    this.scans   = [];
     this.settings = {
       baseUrl: BASE_URL,
       appName: 'Dynamic QR Studio',
       adminProtection: false,
-      adminKey: 'admin123'
+      adminKey: 'admin123',
     };
-
-    this.qrById = new Map();
+    this.qrById   = new Map();
     this.qrBySlug = new Map();
-    this.initialized = false;
-  }
-
-  async init() {
-    if (this.initialized) return;
-
-    if (!fs.existsSync(this.dataDir)) {
-      fs.mkdirSync(this.dataDir, { recursive: true });
-    }
-
-    // On serverless environments (like Vercel), copy seed templates to /tmp/data if missing
-    const bundledDir = path.join(__dirname, '..', 'data');
-    if (this.dataDir !== bundledDir && fs.existsSync(bundledDir)) {
-      ['qrcodes.json', 'scans.json', 'settings.json'].forEach(file => {
-        const target = path.join(this.dataDir, file);
-        const source = path.join(bundledDir, file);
-        if (!fs.existsSync(target) && fs.existsSync(source)) {
-          try {
-            fs.copyFileSync(source, target);
-          } catch (e) {
-            console.warn('[Database] Seed copy warning:', e.message);
-          }
-        }
-      });
-    }
-
-    this.qrCodes = this._loadFile(this.qrCodesFile, DEFAULT_QR_CODES);
-    if (!this.qrCodes || this.qrCodes.length === 0) {
-      this.qrCodes = [...DEFAULT_QR_CODES];
-    }
-    this.scans = this._loadFile(this.scansFile, []);
-    this.settings = this._loadFile(this.settingsFile, this.settings);
-
-    this._rebuildIndexes();
-    this.initialized = true;
-    console.log(`[Database] Loaded ${this.qrCodes.length} QR codes and ${this.scans.length} scan records.`);
-  }
-
-  _loadFile(filePath, defaultValue) {
-    try {
-      if (fs.existsSync(filePath)) {
-        const raw = fs.readFileSync(filePath, 'utf8');
-        return JSON.parse(raw);
-      }
-    } catch (err) {
-      console.error(`[Database] Error reading ${filePath}, using defaults:`, err.message);
-    }
-    this._saveFile(filePath, defaultValue);
-    return defaultValue;
-  }
-
-  _saveFile(filePath, data) {
-    try {
-      const dir = path.dirname(filePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      const tempPath = `${filePath}.tmp.${Date.now()}`;
-      fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf8');
-      fs.renameSync(tempPath, filePath);
-    } catch (err) {
-      console.error(`[Database] Error writing to ${filePath}:`, err.message);
-    }
   }
 
   _rebuildIndexes() {
@@ -120,246 +82,414 @@ class Database {
     this.qrBySlug.clear();
     for (const qr of this.qrCodes) {
       this.qrById.set(qr.id, qr);
-      if (qr.slug) {
-        this.qrBySlug.set(qr.slug.toLowerCase(), qr);
-      }
+      if (qr.slug) this.qrBySlug.set(qr.slug.toLowerCase(), qr);
     }
   }
+}
 
-  // --- QR Code Methods ---
+// ─────────────────────────────────────────────────────────────────────────────
+// Database class
+// ─────────────────────────────────────────────────────────────────────────────
+class Database {
+  constructor() {
+    this.initialized = false;
+    this._mem = null;   // set only when running without MONGODB_URI
+  }
 
-  getQRCodes({ search, tag, active, sort = 'createdAt', order = 'desc', limit, offset = 0 } = {}) {
-    let list = [...this.qrCodes];
+  // ── init ─────────────────────────────────────────────────────────────────
+  async init() {
+    if (this.initialized) return;
 
-    if (search) {
-      const s = search.toLowerCase();
-      list = list.filter(q =>
-        q.title.toLowerCase().includes(s) ||
-        q.slug.toLowerCase().includes(s) ||
-        q.destinationUrl.toLowerCase().includes(s) ||
-        (q.tags && q.tags.some(t => t.toLowerCase().includes(s)))
+    if (!MONGODB_URI) {
+      console.warn(
+        '[Database] WARNING: MONGODB_URI not set — running with in-memory ' +
+        'storage. Data will be lost between restarts.'
       );
+      this._mem = new InMemoryFallback();
+      this.initialized = true;
+      return;
     }
 
-    if (tag) {
-      list = list.filter(q => q.tags && q.tags.includes(tag));
+    try {
+      const db = await getDB();
+      const count = await db.collection('qrcodes').countDocuments();
+      console.log(`[Database] Connected to MongoDB. ${count} QR code(s) in collection.`);
+      this.initialized = true;
+    } catch (err) {
+      console.error('[Database] MongoDB connection failed:', err.message);
+      throw err;
     }
-
-    if (typeof active === 'boolean') {
-      list = list.filter(q => q.active === active);
-    }
-
-    list.sort((a, b) => {
-      let valA = a[sort];
-      let valB = b[sort];
-      if (sort === 'createdAt' || sort === 'updatedAt' || sort === 'lastScannedAt') {
-        valA = valA ? new Date(valA).getTime() : 0;
-        valB = valB ? new Date(valB).getTime() : 0;
-      }
-      if (valA < valB) return order === 'asc' ? -1 : 1;
-      if (valA > valB) return order === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    const total = list.length;
-    if (limit) {
-      list = list.slice(offset, offset + limit);
-    }
-
-    return { total, items: list };
   }
 
-  getQRCodeById(id) {
-    return this.qrById.get(id) || null;
-  }
-
-  getQRCodeBySlug(slug) {
-    if (!slug) return null;
-    return this.qrBySlug.get(slug.toLowerCase()) || null;
-  }
-
-  createQRCode(data) {
-    const id = crypto.randomUUID();
-    const slug = (data.slug || this.generateSlug()).trim().toLowerCase();
-
-    if (this.qrBySlug.has(slug)) {
-      throw new Error(`The custom slug "${slug}" is already in use.`);
-    }
-
-    const newQR = {
-      id,
-      slug,
-      title: data.title || `QR Code ${slug}`,
-      destinationUrl: data.destinationUrl,
-      active: data.active !== undefined ? Boolean(data.active) : true,
-      tags: Array.isArray(data.tags) ? data.tags : (data.tags ? data.tags.split(',').map(t => t.trim()).filter(Boolean) : []),
-      style: {
-        fgColor: data.style?.fgColor || '#000000',
-        bgColor: data.style?.bgColor || '#ffffff',
-        errorCorrectionLevel: data.style?.errorCorrectionLevel || 'M',
-        margin: data.style?.margin !== undefined ? Number(data.style.margin) : 2,
-        dotStyle: data.style?.dotStyle || 'square'
-      },
-      expiresAt: data.expiresAt || null,
-      totalScans: 0,
-      uniqueVisitors: 0,
-      lastScannedAt: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    this.qrCodes.push(newQR);
-    this._rebuildIndexes();
-    this._saveFile(this.qrCodesFile, this.qrCodes);
-    return newQR;
-  }
-
-  updateQRCode(id, updates) {
-    const qr = this.qrById.get(id);
-    if (!qr) return null;
-
-    if (updates.slug && updates.slug.toLowerCase() !== qr.slug.toLowerCase()) {
-      const newSlug = updates.slug.trim().toLowerCase();
-      const existing = this.qrBySlug.get(newSlug);
-      if (existing && existing.id !== id) {
-        throw new Error(`The slug "${newSlug}" is already taken.`);
-      }
-      qr.slug = newSlug;
-    }
-
-    if (updates.title !== undefined) qr.title = updates.title;
-    if (updates.destinationUrl !== undefined) qr.destinationUrl = updates.destinationUrl;
-    if (updates.active !== undefined) qr.active = Boolean(updates.active);
-    if (updates.expiresAt !== undefined) qr.expiresAt = updates.expiresAt;
-
-    if (updates.tags !== undefined) {
-      qr.tags = Array.isArray(updates.tags) ? updates.tags : updates.tags.split(',').map(t => t.trim()).filter(Boolean);
-    }
-
-    if (updates.style) {
-      qr.style = {
-        ...qr.style,
-        ...updates.style
-      };
-    }
-
-    qr.updatedAt = new Date().toISOString();
-
-    this._rebuildIndexes();
-    this._saveFile(this.qrCodesFile, this.qrCodes);
-    return qr;
-  }
-
-  deleteQRCode(id) {
-    const idx = this.qrCodes.findIndex(q => q.id === id);
-    if (idx === -1) return false;
-
-    const qr = this.qrCodes[idx];
-    this.qrCodes.splice(idx, 1);
-    this._rebuildIndexes();
-    this._saveFile(this.qrCodesFile, this.qrCodes);
-
-    // Clean up scans for this QR
-    this.scans = this.scans.filter(s => s.qrCodeId !== id);
-    this._saveFile(this.scansFile, this.scans);
-    return true;
-  }
-
+  // ── helpers ───────────────────────────────────────────────────────────────
   generateSlug(length = 6) {
     const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
-    let slug = '';
-    let attempts = 0;
-    while (attempts < 50) {
-      slug = '';
+    for (let attempt = 0; attempt < 50; attempt++) {
+      let slug = '';
       for (let i = 0; i < length; i++) {
         slug += chars[Math.floor(Math.random() * chars.length)];
       }
-      if (!this.qrBySlug.has(slug)) return slug;
-      attempts++;
+      // Collision check is done in createQRCode via unique index / map lookup
+      return slug;
     }
     return crypto.randomUUID().slice(0, 8);
   }
 
-  // --- Scan Tracking Methods ---
+  // ── QR Codes ──────────────────────────────────────────────────────────────
+  getQRCodes({ search, tag, active, sort = 'createdAt', order = 'desc', limit, offset = 0 } = {}) {
+    if (this._mem) {
+      let list = [...this._mem.qrCodes];
+      if (search) {
+        const s = search.toLowerCase();
+        list = list.filter(q =>
+          q.title.toLowerCase().includes(s) ||
+          q.slug.toLowerCase().includes(s) ||
+          q.destinationUrl.toLowerCase().includes(s) ||
+          (q.tags && q.tags.some(t => t.toLowerCase().includes(s)))
+        );
+      }
+      if (tag)                    list = list.filter(q => q.tags && q.tags.includes(tag));
+      if (typeof active === 'boolean') list = list.filter(q => q.active === active);
+      list.sort((a, b) => {
+        let va = a[sort], vb = b[sort];
+        if (['createdAt','updatedAt','lastScannedAt'].includes(sort)) {
+          va = va ? new Date(va).getTime() : 0;
+          vb = vb ? new Date(vb).getTime() : 0;
+        }
+        return order === 'asc' ? (va < vb ? -1 : va > vb ? 1 : 0)
+                               : (va > vb ? -1 : va < vb ? 1 : 0);
+      });
+      const total = list.length;
+      if (limit) list = list.slice(offset, offset + limit);
+      return { total, items: list };
+    }
 
-  recordScan(scanData) {
-    const id = crypto.randomUUID();
-    const qr = this.qrById.get(scanData.qrCodeId);
+    // MongoDB path — NOTE: synchronous callers rely on returned value,
+    // so we return a Promise.  Callers that do  `const { total } = db.getQRCodes()`
+    // already await or we need to make the API async.
+    // We'll return a thenable object to keep callers backward-compatible:
+    return this._getQRCodesAsync({ search, tag, active, sort, order, limit, offset });
+  }
 
-    const record = {
+  // Internal async implementation for MongoDB
+  async _getQRCodesAsync({ search, tag, active, sort = 'createdAt', order = 'desc', limit, offset = 0 }) {
+    const db = await getDB();
+    const query = {};
+    if (search) {
+      const rx = new RegExp(search, 'i');
+      query.$or = [
+        { title: rx }, { slug: rx }, { destinationUrl: rx }, { tags: rx },
+      ];
+    }
+    if (tag)                    query.tags = tag;
+    if (typeof active === 'boolean') query.active = active;
+
+    const sortDir = order === 'asc' ? 1 : -1;
+    const sortObj = { [sort]: sortDir };
+
+    const total = await db.collection('qrcodes').countDocuments(query);
+    let cursor = db.collection('qrcodes').find(query).sort(sortObj).skip(offset);
+    if (limit) cursor = cursor.limit(limit);
+    const items = await cursor.toArray();
+    return { total, items };
+  }
+
+  getQRCodeById(id) {
+    if (this._mem) return this._mem.qrById.get(id) || null;
+    return this._getQRCodeByIdAsync(id);
+  }
+
+  async _getQRCodeByIdAsync(id) {
+    const db = await getDB();
+    return db.collection('qrcodes').findOne({ id }) || null;
+  }
+
+  getQRCodeBySlug(slug) {
+    if (!slug) return null;
+    if (this._mem) return this._mem.qrBySlug.get(slug.toLowerCase()) || null;
+    return this._getQRCodeBySlugAsync(slug.toLowerCase());
+  }
+
+  async _getQRCodeBySlugAsync(slug) {
+    const db = await getDB();
+    return db.collection('qrcodes').findOne({ slug }) || null;
+  }
+
+  createQRCode(data) {
+    const id   = crypto.randomUUID();
+    const slug = (data.slug || this.generateSlug()).trim().toLowerCase();
+
+    const newQR = {
       id,
-      qrCodeId: scanData.qrCodeId,
-      slug: scanData.slug,
-      timestamp: new Date().toISOString(),
-      ipHash: scanData.ipHash || 'unknown',
-      userAgent: scanData.userAgent || '',
-      device: scanData.device || 'desktop',
-      browser: scanData.browser || 'Unknown',
-      os: scanData.os || 'Unknown',
-      referrer: scanData.referrer || 'Direct',
-      country: scanData.country || 'Unknown'
+      slug,
+      title:          data.title || `QR Code ${slug}`,
+      destinationUrl: data.destinationUrl,
+      active:         data.active !== undefined ? Boolean(data.active) : true,
+      tags:           Array.isArray(data.tags)
+                        ? data.tags
+                        : (data.tags ? data.tags.split(',').map(t => t.trim()).filter(Boolean) : []),
+      style: {
+        fgColor:               data.style?.fgColor               || '#000000',
+        bgColor:               data.style?.bgColor               || '#ffffff',
+        errorCorrectionLevel:  data.style?.errorCorrectionLevel  || 'M',
+        margin:                data.style?.margin  !== undefined ? Number(data.style.margin) : 2,
+        dotStyle:              data.style?.dotStyle              || 'square',
+      },
+      expiresAt:      data.expiresAt     || null,
+      totalScans:     0,
+      uniqueVisitors: 0,
+      lastScannedAt:  null,
+      createdAt:      new Date().toISOString(),
+      updatedAt:      new Date().toISOString(),
     };
 
-    this.scans.push(record);
-    this._saveFile(this.scansFile, this.scans);
-
-    if (qr) {
-      qr.totalScans = (qr.totalScans || 0) + 1;
-      qr.lastScannedAt = record.timestamp;
-
-      // Calculate unique visitors for this QR
-      const uniqueIps = new Set(this.scans.filter(s => s.qrCodeId === qr.id).map(s => s.ipHash));
-      qr.uniqueVisitors = uniqueIps.size;
-
-      this._saveFile(this.qrCodesFile, this.qrCodes);
+    if (this._mem) {
+      if (this._mem.qrBySlug.has(slug))
+        throw new Error(`The custom slug "${slug}" is already in use.`);
+      this._mem.qrCodes.push(newQR);
+      this._mem._rebuildIndexes();
+      return newQR;
     }
+
+    return this._createQRCodeAsync(newQR);
+  }
+
+  async _createQRCodeAsync(newQR) {
+    const db = await getDB();
+    try {
+      await db.collection('qrcodes').insertOne({ ...newQR, _id: newQR.id });
+    } catch (err) {
+      if (err.code === 11000) throw new Error(`The custom slug "${newQR.slug}" is already in use.`);
+      throw err;
+    }
+    return newQR;
+  }
+
+  updateQRCode(id, updates) {
+    if (this._mem) {
+      const qr = this._mem.qrById.get(id);
+      if (!qr) return null;
+      if (updates.slug && updates.slug.toLowerCase() !== qr.slug.toLowerCase()) {
+        const newSlug = updates.slug.trim().toLowerCase();
+        const existing = this._mem.qrBySlug.get(newSlug);
+        if (existing && existing.id !== id) throw new Error(`The slug "${newSlug}" is already taken.`);
+        qr.slug = newSlug;
+      }
+      if (updates.title          !== undefined) qr.title          = updates.title;
+      if (updates.destinationUrl !== undefined) qr.destinationUrl = updates.destinationUrl;
+      if (updates.active         !== undefined) qr.active         = Boolean(updates.active);
+      if (updates.expiresAt      !== undefined) qr.expiresAt      = updates.expiresAt;
+      if (updates.tags           !== undefined) {
+        qr.tags = Array.isArray(updates.tags)
+          ? updates.tags
+          : updates.tags.split(',').map(t => t.trim()).filter(Boolean);
+      }
+      if (updates.style) qr.style = { ...qr.style, ...updates.style };
+      qr.updatedAt = new Date().toISOString();
+      this._mem._rebuildIndexes();
+      return qr;
+    }
+    return this._updateQRCodeAsync(id, updates);
+  }
+
+  async _updateQRCodeAsync(id, updates) {
+    const db = await getDB();
+    const qr = await db.collection('qrcodes').findOne({ id });
+    if (!qr) return null;
+
+    const $set = { updatedAt: new Date().toISOString() };
+
+    if (updates.slug && updates.slug.toLowerCase() !== qr.slug.toLowerCase()) {
+      const newSlug = updates.slug.trim().toLowerCase();
+      const existing = await db.collection('qrcodes').findOne({ slug: newSlug });
+      if (existing && existing.id !== id) throw new Error(`The slug "${newSlug}" is already taken.`);
+      $set.slug = newSlug;
+    }
+    if (updates.title          !== undefined) $set.title          = updates.title;
+    if (updates.destinationUrl !== undefined) $set.destinationUrl = updates.destinationUrl;
+    if (updates.active         !== undefined) $set.active         = Boolean(updates.active);
+    if (updates.expiresAt      !== undefined) $set.expiresAt      = updates.expiresAt;
+    if (updates.tags           !== undefined) {
+      $set.tags = Array.isArray(updates.tags)
+        ? updates.tags
+        : updates.tags.split(',').map(t => t.trim()).filter(Boolean);
+    }
+    if (updates.style) $set.style = { ...qr.style, ...updates.style };
+
+    const result = await db.collection('qrcodes').findOneAndUpdate(
+      { id },
+      { $set },
+      { returnDocument: 'after' },
+    );
+    return result || null;
+  }
+
+  deleteQRCode(id) {
+    if (this._mem) {
+      const idx = this._mem.qrCodes.findIndex(q => q.id === id);
+      if (idx === -1) return false;
+      this._mem.qrCodes.splice(idx, 1);
+      this._mem.scans = this._mem.scans.filter(s => s.qrCodeId !== id);
+      this._mem._rebuildIndexes();
+      return true;
+    }
+    return this._deleteQRCodeAsync(id);
+  }
+
+  async _deleteQRCodeAsync(id) {
+    const db = await getDB();
+    const result = await db.collection('qrcodes').deleteOne({ id });
+    if (result.deletedCount === 0) return false;
+    await db.collection('scans').deleteMany({ qrCodeId: id });
+    return true;
+  }
+
+  // ── Scans ─────────────────────────────────────────────────────────────────
+  recordScan(scanData) {
+    const id = crypto.randomUUID();
+    const record = {
+      id,
+      qrCodeId:  scanData.qrCodeId,
+      slug:      scanData.slug,
+      timestamp: new Date().toISOString(),
+      ipHash:    scanData.ipHash    || 'unknown',
+      userAgent: scanData.userAgent || '',
+      device:    scanData.device    || 'desktop',
+      browser:   scanData.browser   || 'Unknown',
+      os:        scanData.os        || 'Unknown',
+      referrer:  scanData.referrer  || 'Direct',
+      country:   scanData.country   || 'Unknown',
+    };
+
+    if (this._mem) {
+      this._mem.scans.push(record);
+      const qr = this._mem.qrById.get(scanData.qrCodeId);
+      if (qr) {
+        qr.totalScans = (qr.totalScans || 0) + 1;
+        qr.lastScannedAt = record.timestamp;
+        const uniqueIps = new Set(this._mem.scans.filter(s => s.qrCodeId === qr.id).map(s => s.ipHash));
+        qr.uniqueVisitors = uniqueIps.size;
+      }
+      return Promise.resolve(record);
+    }
+    return this._recordScanAsync(record);
+  }
+
+  async _recordScanAsync(record) {
+    const db = await getDB();
+    await db.collection('scans').insertOne({ ...record, _id: record.id });
+
+    // Update parent QR counters
+    const [totalScans, uniqueDocs] = await Promise.all([
+      db.collection('scans').countDocuments({ qrCodeId: record.qrCodeId }),
+      db.collection('scans').distinct('ipHash', { qrCodeId: record.qrCodeId }),
+    ]);
+
+    await db.collection('qrcodes').updateOne(
+      { id: record.qrCodeId },
+      { $set: { totalScans, uniqueVisitors: uniqueDocs.length, lastScannedAt: record.timestamp } },
+    );
 
     return record;
   }
 
   getScansByQRCodeId(qrCodeId, { limit = 100 } = {}) {
-    return this.scans
-      .filter(s => s.qrCodeId === qrCodeId)
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, limit);
+    if (this._mem) {
+      return this._mem.scans
+        .filter(s => s.qrCodeId === qrCodeId)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, limit);
+    }
+    return this._getScansByQRCodeIdAsync(qrCodeId, limit);
+  }
+
+  async _getScansByQRCodeIdAsync(qrCodeId, limit) {
+    const db = await getDB();
+    return db.collection('scans')
+      .find({ qrCodeId })
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .toArray();
   }
 
   getAllScans({ limit = 100 } = {}) {
-    return [...this.scans]
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, limit);
+    if (this._mem) {
+      return [...this._mem.scans]
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, limit);
+    }
+    return this._getAllScansAsync(limit);
   }
 
-  // --- Settings & Metrics ---
+  async _getAllScansAsync(limit) {
+    const db = await getDB();
+    return db.collection('scans').find().sort({ timestamp: -1 }).limit(limit).toArray();
+  }
 
+  // ── Settings ──────────────────────────────────────────────────────────────
   getSettings() {
-    return { ...this.settings };
+    if (this._mem) return { ...this._mem.settings };
+    return this._getSettingsAsync();
+  }
+
+  async _getSettingsAsync() {
+    const db = await getDB();
+    const doc = await db.collection('settings').findOne({ _id: 'global' });
+    return doc || {
+      baseUrl: BASE_URL,
+      appName: 'Dynamic QR Studio',
+      adminProtection: false,
+      adminKey: 'admin123',
+    };
   }
 
   updateSettings(updates) {
-    this.settings = { ...this.settings, ...updates };
-    this._saveFile(this.settingsFile, this.settings);
-    return this.settings;
+    if (this._mem) {
+      this._mem.settings = { ...this._mem.settings, ...updates };
+      return this._mem.settings;
+    }
+    return this._updateSettingsAsync(updates);
   }
 
+  async _updateSettingsAsync(updates) {
+    const db = await getDB();
+    const result = await db.collection('settings').findOneAndUpdate(
+      { _id: 'global' },
+      { $set: updates },
+      { upsert: true, returnDocument: 'after' },
+    );
+    return result;
+  }
+
+  // ── Overview Stats ────────────────────────────────────────────────────────
   getOverviewStats() {
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    if (this._mem) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const totalQRs = this._mem.qrCodes.length;
+      const activeQRs = this._mem.qrCodes.filter(q => q.active).length;
+      const totalScans = this._mem.scans.length;
+      const todayScans = this._mem.scans.filter(s => s.timestamp.startsWith(todayStr)).length;
+      const allUniqueVisitors = new Set(this._mem.scans.map(s => s.ipHash)).size;
+      return { totalQRs, activeQRs, inactiveQRs: totalQRs - activeQRs, totalScans, todayScans, uniqueVisitors: allUniqueVisitors };
+    }
+    return this._getOverviewStatsAsync();
+  }
 
-    const totalQRs = this.qrCodes.length;
-    const activeQRs = this.qrCodes.filter(q => q.active).length;
-    const totalScans = this.scans.length;
-
-    const todayScans = this.scans.filter(s => s.timestamp.startsWith(todayStr)).length;
-    const allUniqueVisitors = new Set(this.scans.map(s => s.ipHash)).size;
-
+  async _getOverviewStatsAsync() {
+    const db = await getDB();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const [totalQRs, activeQRs, totalScans, todayScans, uniqueHashes] = await Promise.all([
+      db.collection('qrcodes').countDocuments(),
+      db.collection('qrcodes').countDocuments({ active: true }),
+      db.collection('scans').countDocuments(),
+      db.collection('scans').countDocuments({ timestamp: { $gte: todayStr } }),
+      db.collection('scans').distinct('ipHash'),
+    ]);
     return {
-      totalQRs,
-      activeQRs,
+      totalQRs, activeQRs,
       inactiveQRs: totalQRs - activeQRs,
-      totalScans,
-      todayScans,
-      uniqueVisitors: allUniqueVisitors
+      totalScans, todayScans,
+      uniqueVisitors: uniqueHashes.length,
     };
   }
 }

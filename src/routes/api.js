@@ -15,27 +15,31 @@ const upload = multer({
 });
 
 // Admin authentication middleware (optional, enabled via settings)
-function adminAuthMiddleware(req, res, next) {
-  const settings = db.getSettings();
-  if (!settings.adminProtection) {
-    return next();
-  }
+async function adminAuthMiddleware(req, res, next) {
+  try {
+    const settings = await db.getSettings();
+    if (!settings.adminProtection) {
+      return next();
+    }
 
-  const clientKey = req.headers['x-admin-key'] || req.query.key;
-  if (!clientKey || clientKey !== settings.adminKey) {
-    return res.status(401).json({ error: 'Unauthorized: Invalid or missing admin key.' });
-  }
+    const clientKey = req.headers['x-admin-key'] || req.query.key;
+    if (!clientKey || clientKey !== settings.adminKey) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid or missing admin key.' });
+    }
 
-  next();
+    next();
+  } catch (err) {
+    next(err);
+  }
 }
 
 router.use(adminAuthMiddleware);
 
 // --- Overview & Analytics ---
 
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
-    const data = analyticsService.getOverviewMetrics();
+    const data = await analyticsService.getOverviewMetrics();
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -44,7 +48,7 @@ router.get('/stats', (req, res) => {
 
 // --- QR Code CRUD ---
 
-router.get('/qr', (req, res) => {
+router.get('/qr', async (req, res) => {
   try {
     const { search, tag, active, sort, order, page = 1, limit = 20 } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
@@ -53,7 +57,7 @@ router.get('/qr', (req, res) => {
     if (active === 'true') parsedActive = true;
     if (active === 'false') parsedActive = false;
 
-    const result = db.getQRCodes({
+    const result = await db.getQRCodes({
       search,
       tag,
       active: parsedActive,
@@ -90,7 +94,7 @@ router.post('/qr', async (req, res) => {
       return res.status(400).json({ error: 'Invalid destination URL format.' });
     }
 
-    const qr = db.createQRCode({
+    const qr = await db.createQRCode({
       destinationUrl: normUrl,
       title: title || undefined,
       slug: slug || undefined,
@@ -109,18 +113,22 @@ router.post('/qr', async (req, res) => {
   }
 });
 
-router.get('/qr/:id', (req, res) => {
-  const qr = db.getQRCodeById(req.params.id);
-  if (!qr) {
-    return res.status(404).json({ error: 'QR Code not found.' });
+router.get('/qr/:id', async (req, res) => {
+  try {
+    const qr = await db.getQRCodeById(req.params.id);
+    if (!qr) {
+      return res.status(404).json({ error: 'QR Code not found.' });
+    }
+    res.json({
+      ...qr,
+      shortUrl: qrService.getEncodedUrl(qr.slug)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  res.json({
-    ...qr,
-    shortUrl: qrService.getEncodedUrl(qr.slug)
-  });
 });
 
-router.put('/qr/:id', (req, res) => {
+router.put('/qr/:id', async (req, res) => {
   try {
     const updates = { ...req.body };
     if (updates.destinationUrl) {
@@ -131,7 +139,7 @@ router.put('/qr/:id', (req, res) => {
       updates.destinationUrl = normUrl;
     }
 
-    const updated = db.updateQRCode(req.params.id, updates);
+    const updated = await db.updateQRCode(req.params.id, updates);
     if (!updated) {
       return res.status(404).json({ error: 'QR Code not found.' });
     }
@@ -145,19 +153,23 @@ router.put('/qr/:id', (req, res) => {
   }
 });
 
-router.delete('/qr/:id', (req, res) => {
-  const success = db.deleteQRCode(req.params.id);
-  if (!success) {
-    return res.status(404).json({ error: 'QR Code not found.' });
+router.delete('/qr/:id', async (req, res) => {
+  try {
+    const success = await db.deleteQRCode(req.params.id);
+    if (!success) {
+      return res.status(404).json({ error: 'QR Code not found.' });
+    }
+    res.json({ message: 'QR Code and related scans deleted successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  res.json({ message: 'QR Code and related scans deleted successfully.' });
 });
 
 // --- Image Generation & Downloads ---
 
 router.get('/qr/:id/preview', async (req, res) => {
   try {
-    const qr = db.getQRCodeById(req.params.id);
+    const qr = await db.getQRCodeById(req.params.id);
     if (!qr) return res.status(404).send('Not Found');
 
     const format = (req.query.format || 'png').toLowerCase();
@@ -184,7 +196,7 @@ router.get('/qr/:id/preview', async (req, res) => {
 
 router.get('/qr/:id/download', async (req, res) => {
   try {
-    const qr = db.getQRCodeById(req.params.id);
+    const qr = await db.getQRCodeById(req.params.id);
     if (!qr) return res.status(404).send('Not Found');
 
     const format = (req.query.format || 'png').toLowerCase();
@@ -241,17 +253,21 @@ router.get('/preview-custom', async (req, res) => {
 
 // --- Analytics Endpoint ---
 
-router.get('/qr/:id/analytics', (req, res) => {
-  const data = analyticsService.getQRAnalytics(req.params.id);
-  if (!data) {
-    return res.status(404).json({ error: 'QR Code not found.' });
+router.get('/qr/:id/analytics', async (req, res) => {
+  try {
+    const data = await analyticsService.getQRAnalytics(req.params.id);
+    if (!data) {
+      return res.status(404).json({ error: 'QR Code not found.' });
+    }
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  res.json(data);
 });
 
 // --- Bulk Operations ---
 
-router.post('/bulk/create', (req, res) => {
+router.post('/bulk/create', async (req, res) => {
   try {
     const { items, text } = req.body;
     let listToProcess = [];
@@ -268,7 +284,7 @@ router.post('/bulk/create', (req, res) => {
       return res.status(400).json({ error: 'No items found to process.' });
     }
 
-    const result = bulkService.processBulkCreation(listToProcess);
+    const result = await bulkService.processBulkCreation(listToProcess);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -286,9 +302,9 @@ router.post('/bulk/upload', upload.single('file'), async (req, res) => {
   stream
     .pipe(csv())
     .on('data', data => rows.push(data))
-    .on('end', () => {
+    .on('end', async () => {
       try {
-        const result = bulkService.processBulkCreation(rows);
+        const result = await bulkService.processBulkCreation(rows);
         res.json(result);
       } catch (err) {
         res.status(500).json({ error: err.message });
@@ -309,9 +325,9 @@ router.get('/bulk/export', async (req, res) => {
   }
 });
 
-router.get('/bulk/export-csv', (req, res) => {
+router.get('/bulk/export-csv', async (req, res) => {
   try {
-    const csvContent = bulkService.generateCSV();
+    const csvContent = await bulkService.generateCSV();
     res.attachment(`qr-codes-${Date.now()}.csv`);
     res.setHeader('Content-Type', 'text/csv');
     res.send(csvContent);
@@ -322,16 +338,20 @@ router.get('/bulk/export-csv', (req, res) => {
 
 // --- Settings ---
 
-router.get('/settings', (req, res) => {
-  const current = db.getSettings();
-  res.json({
-    baseUrl: current.baseUrl,
-    appName: current.appName,
-    adminProtection: current.adminProtection
-  });
+router.get('/settings', async (req, res) => {
+  try {
+    const current = await db.getSettings();
+    res.json({
+      baseUrl: current.baseUrl,
+      appName: current.appName,
+      adminProtection: current.adminProtection
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.put('/settings', (req, res) => {
+router.put('/settings', async (req, res) => {
   try {
     const { baseUrl, appName, adminProtection, adminKey } = req.body;
     const updates = {};
@@ -340,7 +360,7 @@ router.put('/settings', (req, res) => {
     if (adminProtection !== undefined) updates.adminProtection = Boolean(adminProtection);
     if (adminKey !== undefined && adminKey.trim()) updates.adminKey = adminKey.trim();
 
-    const saved = db.updateSettings(updates);
+    const saved = await db.updateSettings(updates);
     res.json({
       baseUrl: saved.baseUrl,
       appName: saved.appName,

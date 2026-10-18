@@ -21,9 +21,9 @@ class BulkService {
   }
 
   /**
-   * Processes a list of items for bulk creation
+   * Processes a list of items for bulk creation (async)
    */
-  processBulkCreation(items) {
+  async processBulkCreation(items) {
     const results = {
       total: items.length,
       successCount: 0,
@@ -51,7 +51,7 @@ class BulkService {
       let customSlug = (item.slug || item.custom_slug || '').trim().toLowerCase();
 
       // Check if custom slug already exists; if so, make unique
-      if (customSlug && db.getQRCodeBySlug(customSlug)) {
+      if (customSlug && await db.getQRCodeBySlug(customSlug)) {
         customSlug = `${customSlug}-${Math.random().toString(36).slice(2, 6)}`;
       }
 
@@ -60,7 +60,7 @@ class BulkService {
       const bgColor = item.bgColor || item.bg_color || '#ffffff';
 
       try {
-        const qr = db.createQRCode({
+        const qr = await db.createQRCode({
           title,
           destinationUrl: normUrl,
           slug: customSlug || undefined,
@@ -123,14 +123,14 @@ class BulkService {
   }
 
   /**
-   * Exports QR codes to a ZIP archive stream
+   * Exports QR codes to a ZIP archive stream (async)
    */
   async streamZipArchive(res, { qrIds, format = 'all' } = {}) {
     let list;
     if (Array.isArray(qrIds) && qrIds.length > 0) {
-      list = qrIds.map(id => db.getQRCodeById(id)).filter(Boolean);
+      list = (await Promise.all(qrIds.map(id => db.getQRCodeById(id)))).filter(Boolean);
     } else {
-      list = db.getQRCodes().items;
+      list = (await db.getQRCodes()).items;
     }
 
     if (list.length === 0) {
@@ -196,10 +196,10 @@ class BulkService {
   }
 
   /**
-   * Generates a CSV string of all QR codes
+   * Generates a CSV string of all QR codes (async)
    */
-  generateCSV() {
-    const list = db.getQRCodes().items;
+  async generateCSV() {
+    const list = (await db.getQRCodes()).items;
     const csvRows = ['ID,Title,Slug,Short_URL,Destination_URL,Total_Scans,Unique_Visitors,Active,Created_At,Last_Scanned_At'];
     for (const qr of list) {
       const shortUrl = qrService.getEncodedUrl(qr.slug);
