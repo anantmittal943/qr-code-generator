@@ -1,0 +1,23 @@
+{
+  "name": "qr-code-generator",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "archiver": "^8.0.0",
+    "cors": "^2.8.6",
+    "csv-parser": "^3.2.1",
+    "express": "^5.3.0",
+    "multer": "^2.4.0",
+    "qrcode": "^1.5.4",
+    "ua-parser-js": "^2.0.10"
+  }
+}

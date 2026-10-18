@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynamic QR Studio | Professional QR Code Generator & Analytics</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col min-h-screen">
+
+  <!-- Top Navbar -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <i data-lucide="qr-code" class="w-6 h-6 text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="font-extrabold text-lg tracking-tight text-white">Dynamic<span class="text-indigo-400">QR</span> Studio</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>Live
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">Professional Dynamic QR Engine & Analytics</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex items-center space-x-1 sm:space-x-2 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60">
+        <button onclick="switchTab('overview')" id="tab-btn-overview" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium transition-all text-white bg-indigo-600 shadow-sm flex items-center space-x-1.5">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Overview</span>
+        </button>
+        <button onclick="switchTab('qrcodes')" id="tab-btn-qrcodes" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-white flex items-center space-x-1.5">
+          <i data-lucide="list" class="w-4 h-4"></i>
+          <span class="hidden md:inline">QR Codes</span>
+        </button>
+        <button onclick="switchTab('create')" id="tab-btn-create" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-white flex items-center space-x-1.5">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Create</span>
+        </button>
+        <button onclick="switchTab('bulk')" id="tab-btn-bulk" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-white flex items-center space-x-1.5">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Bulk Tools</span>
+        </button>
+        <button onclick="switchTab('analytics')" id="tab-btn-analytics" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-white flex items-center space-x-1.5">
+          <i data-lucide="bar-chart-2" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Analytics</span>
+        </button>
+        <button onclick="switchTab('settings')" id="tab-btn-settings" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-white flex items-center space-x-1.5">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Settings</span>
+        </button>
+      </nav>
+
+      <!-- Quick Action -->
+      <div class="hidden lg:flex items-center space-x-3">
+        <button onclick="switchTab('create')" class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm transition-all shadow-md shadow-indigo-600/30">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>New QR Code</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Body -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- ========================================== -->
+    <!-- TAB 1: OVERVIEW DASHBOARD                 -->
+    <!-- ========================================== -->
+    <section id="tab-overview" class="tab-content space-y-6">
+      <!-- Stat Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-card rounded-2xl p-5 border border-slate-800">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs uppercase tracking-wider font-semibold">Total Dynamic QRs</span>
+            <div class="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
+              <i data-lucide="qr-code" class="w-5 h-5"></i>
+            </div>
+          </div>
+          <div id="stat-total-qrs" class="text-3xl font-extrabold text-white">0</div>
+          <div class="mt-2 text-xs text-slate-400 flex items-center">
+            <span id="stat-active-qrs" class="text-emerald-400 font-medium mr-1">0 active</span> campaigns
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 border border-slate-800">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs uppercase tracking-wider font-semibold">Total Scans</span>
+            <div class="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
+              <i data-lucide="scan-line" class="w-5 h-5"></i>
+            </div>
+          </div>
+          <div id="stat-total-scans" class="text-3xl font-extrabold text-white">0</div>
+          <div class="mt-2 text-xs text-slate-400 flex items-center">
+            <span id="stat-today-scans" class="text-indigo-400 font-medium mr-1">0 scans</span> recorded today
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 border border-slate-800">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs uppercase tracking-wider font-semibold">Unique Visitors</span>
+            <div class="p-2 rounded-lg bg-amber-500/10 text-amber-400">
+              <i data-lucide="users" class="w-5 h-5"></i>
+            </div>
+          </div>
+          <div id="stat-unique-visitors" class="text-3xl font-extrabold text-white">0</div>
+          <div class="mt-2 text-xs text-slate-400">
+            Deduplicated daily devices
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 border border-slate-800">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs uppercase tracking-wider font-semibold">Active Rate</span>
+            <div class="p-2 rounded-lg bg-purple-500/10 text-purple-400">
+              <i data-lucide="activity" class="w-5 h-5"></i>
+            </div>
+          </div>
+          <div id="stat-active-rate" class="text-3xl font-extrabold text-white">100%</div>
+          <div class="mt-2 text-xs text-slate-400">
+            Routing health & uptime
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts & Top Performers -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Scans Over Time Chart -->
+        <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center space-x-2">
+                <i data-lucide="trending-up" class="w-4 h-4 text-indigo-400"></i>
+                <span>Scan Activity Trend</span>
+              </h2>
+              <p class="text-xs text-slate-400">Daily dynamic redirection scans (last 14 days)</p>
+            </div>
+          </div>
+          <div class="h-64 relative">
+            <canvas id="overviewTimelineChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Top Performing QR Codes -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-bold text-white flex items-center space-x-2">
+              <i data-lucide="trophy" class="w-4 h-4 text-amber-400"></i>
+              <span>Top Campaigns</span>
+            </h2>
+            <button onclick="switchTab('qrcodes')" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium">View all &rarr;</button>
+          </div>
+          <div id="top-qrs-list" class="space-y-3 flex-1 overflow-y-auto max-h-64 pr-1">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Scans Log Stream -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center space-x-2">
+              <i data-lucide="rss" class="w-4 h-4 text-emerald-400"></i>
+              <span>Live Redirection Audit Trail</span>
+            </h2>
+            <p class="text-xs text-slate-400">Real-time scan events, device fingerprints & referrers</p>
+          </div>
+          <button onclick="loadOverviewData()" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center space-x-1">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>Refresh</span>
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[10px]">
+              <tr>
+                <th class="py-2.5 px-3">Time</th>
+                <th class="py-2.5 px-3">QR Campaign</th>
+                <th class="py-2.5 px-3">Short Slug</th>
+                <th class="py-2.5 px-3">Device</th>
+                <th class="py-2.5 px-3">Browser & OS</th>
+                <th class="py-2.5 px-3">Referrer</th>
+              </tr>
+            </thead>
+            <tbody id="recent-scans-table" class="divide-y divide-slate-800/60 font-mono text-slate-300">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 2: QR CODES MANAGER                    -->
+    <!-- ========================================== -->
+    <section id="tab-qrcodes" class="tab-content hidden space-y-5">
+      <!-- Action Toolbar -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900 p-4 rounded-2xl border border-slate-800">
+        <!-- Search & Filter -->
+        <div class="flex flex-1 items-center space-x-3">
+          <div class="relative flex-1 max-w-md">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+            <input type="text" id="qr-search-input" oninput="debounceSearch()" placeholder="Search title, slug, destination, tags..." class="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500">
+          </div>
+          <select id="qr-status-filter" onchange="loadQRCodesList()" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500">
+            <option value="all">All Status</option>
+            <option value="active">Active Only</option>
+            <option value="inactive">Paused Only</option>
+          </select>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center space-x-2">
+          <button onclick="downloadBulkZip()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition-colors">
+            <i data-lucide="archive" class="w-4 h-4 text-amber-400"></i>
+            <span>Export ZIP</span>
+          </button>
+          <a href="/api/bulk/export-csv" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition-colors">
+            <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-400"></i>
+            <span>CSV</span>
+          </a>
+          <button onclick="switchTab('create')" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-lg shadow-indigo-600/30 transition-all">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Create QR</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- QR Codes Grid / Table -->
+      <div id="qrcodes-container" class="space-y-3">
+        <!-- Rendered via JS -->
+      </div>
+
+      <!-- Pagination -->
+      <div id="qr-pagination" class="flex items-center justify-between text-xs text-slate-400 pt-2">
+        <span id="qr-page-info">Showing 0 of 0</span>
+        <div class="flex space-x-2">
+          <button id="qr-prev-btn" onclick="changePage(-1)" class="px-3 py-1.5 bg-slate-800 rounded-lg disabled:opacity-40">Previous</button>
+          <button id="qr-next-btn" onclick="changePage(1)" class="px-3 py-1.5 bg-slate-800 rounded-lg disabled:opacity-40">Next</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 3: CREATE QR CODE (INTERACTIVE)       -->
+    <!-- ========================================== -->
+    <section id="tab-create" class="tab-content hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <!-- Form Section (7 cols) -->
+        <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-5">
+          <div class="border-b border-slate-800 pb-4">
+            <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+              <i data-lucide="plus-circle" class="w-5 h-5 text-indigo-400"></i>
+              <span>Create New Dynamic QR Code</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-1">Configure destination URL, dynamic short link, and high-resolution styling</p>
+          </div>
+
+          <form id="create-qr-form" onsubmit="handleCreateQR(event)" class="space-y-4">
+            <!-- Destination URL (Required) -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                Destination URL <span class="text-rose-400">*</span>
+              </label>
+              <div class="relative">
+                <i data-lucide="globe" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input type="text" id="create-destination" required oninput="updateLivePreview()" placeholder="https://yourwebsite.com/destination-page" class="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1">You can change this target destination at any time without reprinting the QR code.</p>
+            </div>
+
+            <!-- Title & Custom Slug -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Campaign Title</label>
+                <input type="text" id="create-title" oninput="updateLivePreview()" placeholder="e.g. Summer Sale 2026 Promo" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Custom Short Slug (Optional)</label>
+                <div class="flex items-center">
+                  <span class="bg-slate-800/80 border border-r-0 border-slate-700 rounded-l-xl px-2.5 py-2.5 text-xs text-slate-400">/r/</span>
+                  <input type="text" id="create-slug" oninput="updateLivePreview()" placeholder="e.g. promo26" class="w-full bg-slate-800 border border-slate-700 rounded-r-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+                </div>
+              </div>
+            </div>
+
+            <!-- Tags -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Tags (Comma-separated)</label>
+              <input type="text" id="create-tags" placeholder="Marketing, Retail, Flyer" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <!-- Design & Colors -->
+            <div class="p-4 bg-slate-800/50 border border-slate-800 rounded-xl space-y-4">
+              <span class="text-xs font-bold uppercase tracking-wider text-indigo-400 block">QR Code Styling</span>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1">Foreground Color</label>
+                  <div class="flex items-center space-x-2">
+                    <input type="color" id="create-fg" value="#000000" onchange="updateLivePreview()" class="w-8 h-8 rounded border-0 cursor-pointer bg-transparent">
+                    <input type="text" id="create-fg-hex" value="#000000" onchange="syncColorInput('fg')" class="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-white">
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1">Background Color</label>
+                  <div class="flex items-center space-x-2">
+                    <input type="color" id="create-bg" value="#ffffff" onchange="updateLivePreview()" class="w-8 h-8 rounded border-0 cursor-pointer bg-transparent">
+                    <input type="text" id="create-bg-hex" value="#ffffff" onchange="syncColorInput('bg')" class="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-white">
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-400 mb-1">Error Correction</label>
+                  <select id="create-ecl" onchange="updateLivePreview()" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs text-white">
+                    <option value="L">Low (7% recovery)</option>
+                    <option value="M" selected>Medium (15% recovery)</option>
+                    <option value="Q">Quartile (25% recovery)</option>
+                    <option value="H">High (30% recovery)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Expiry Date (Optional) -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Campaign Expiration (Optional)</label>
+              <input type="datetime-local" id="create-expires" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+              <p class="text-[11px] text-slate-400 mt-1">Leaves empty for indefinite campaign lifetime.</p>
+            </div>
+
+            <!-- Submit -->
+            <div class="pt-2">
+              <button type="submit" id="create-submit-btn" class="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center space-x-2">
+                <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                <span>Generate Dynamic QR Code</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Live Preview Sticky Panel (5 cols) -->
+        <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-6 sticky top-24 space-y-5">
+          <div class="text-center">
+            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Live Preview</h3>
+            <p class="text-xs text-slate-400">Updates in real-time as you adjust settings</p>
+          </div>
+
+          <!-- QR Preview Box -->
+          <div class="qr-preview-box w-64 h-64 mx-auto rounded-2xl p-4 flex items-center justify-center shadow-2xl relative">
+            <img id="live-qr-preview-img" src="/api/preview-custom?text=https://example.com" alt="QR Preview" class="w-full h-full object-contain">
+          </div>
+
+          <div class="bg-slate-800/70 border border-slate-800 rounded-xl p-3 text-center space-y-1">
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Encoded Redirect URL</span>
+            <div id="live-encoded-url" class="text-xs font-mono text-indigo-300 break-all">http://localhost:3000/r/sample</div>
+          </div>
+
+          <div class="text-xs text-slate-400 space-y-2">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
+              <span>High-resolution vector SVG & 1024px PNG outputs</span>
+            </div>
+            <div class="flex items-center space-x-2">
+              <i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
+              <span>Full scan analytics tracking automatically enabled</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 4: BULK GENERATOR & TOOLS              -->
+    <!-- ========================================== -->
+    <section id="tab-bulk" class="tab-content hidden space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <div class="border-b border-slate-800 pb-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+              <i data-lucide="layers" class="w-5 h-5 text-indigo-400"></i>
+              <span>Bulk QR Code Operations</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-1">Create dozens or hundreds of dynamic QR codes simultaneously via CSV or multi-line paste</p>
+          </div>
+          <div class="flex space-x-2">
+            <button onclick="downloadSampleCsv()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5">
+              <i data-lucide="download" class="w-3.5 h-3.5 text-indigo-400"></i>
+              <span>Download CSV Template</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <!-- Method 1: CSV Upload -->
+          <div class="space-y-4">
+            <h3 class="text-sm font-bold text-slate-200 flex items-center space-x-2">
+              <span class="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs">1</span>
+              <span>Upload CSV Spreadsheet</span>
+            </h3>
+            <div id="drop-zone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-2xl p-8 text-center transition-colors cursor-pointer bg-slate-800/30">
+              <input type="file" id="csv-file-input" accept=".csv" onchange="handleFileSelected(event)" class="hidden">
+              <i data-lucide="upload-cloud" class="w-10 h-10 text-indigo-400 mx-auto mb-3"></i>
+              <p class="text-sm font-semibold text-slate-200">Drag & drop your CSV file here</p>
+              <p class="text-xs text-slate-400 mt-1">or <span class="text-indigo-400 underline">browse your files</span></p>
+              <p class="text-[11px] text-slate-500 mt-2">Columns: title, destination_url, custom_slug, tags, fg_color, bg_color</p>
+            </div>
+            <div id="csv-file-status" class="hidden text-xs text-emerald-400 font-medium flex items-center space-x-1">
+              <i data-lucide="check" class="w-4 h-4"></i>
+              <span id="csv-filename">file.csv selected</span>
+            </div>
+            <button onclick="submitBulkCsv()" id="upload-csv-btn" disabled class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md">
+              Upload & Generate from CSV
+            </button>
+          </div>
+
+          <!-- Method 2: Multi-line Quick Paste -->
+          <div class="space-y-4">
+            <h3 class="text-sm font-bold text-slate-200 flex items-center space-x-2">
+              <span class="w-6 h-6 rounded-full bg-violet-600 text-white flex items-center justify-center text-xs">2</span>
+              <span>Quick Multi-Line Paste</span>
+            </h3>
+            <p class="text-xs text-slate-400">One URL per line. Formats: <code class="bg-slate-800 px-1 rounded text-indigo-300">Title | URL | Slug</code> or simply <code class="bg-slate-800 px-1 rounded text-indigo-300">https://url.com</code></p>
+            <textarea id="bulk-text-input" rows="7" placeholder="Summer Promo | https://mysite.com/summer | summer26&#10;Product Catalog | https://mysite.com/catalog&#10;https://mysite.com/signup" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"></textarea>
+            <button onclick="submitBulkText()" class="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition-all shadow-md">
+              Batch Generate from Text
+            </button>
+          </div>
+        </div>
+
+        <!-- Bulk Results Output Box -->
+        <div id="bulk-results-box" class="hidden mt-8 pt-6 border-t border-slate-800 space-y-4">
+          <div class="flex items-center justify-between">
+            <h4 class="text-sm font-bold text-white flex items-center space-x-2">
+              <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+              <span id="bulk-summary-title">Batch Results (0 generated)</span>
+            </h4>
+            <button onclick="downloadBulkZip()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center space-x-1.5 shadow">
+              <i data-lucide="archive" class="w-3.5 h-3.5"></i>
+              <span>Download ZIP Archive</span>
+            </button>
+          </div>
+          <div id="bulk-created-list" class="max-h-60 overflow-y-auto space-y-2 text-xs">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 5: ANALYTICS DEEP DIVE                 -->
+    <!-- ========================================== -->
+    <section id="tab-analytics" class="tab-content hidden space-y-6">
+      <div class="flex items-center justify-between bg-slate-900 p-4 rounded-2xl border border-slate-800">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center space-x-2">
+            <i data-lucide="bar-chart-2" class="w-5 h-5 text-indigo-400"></i>
+            <span>Global Redirection Intelligence</span>
+          </h2>
+          <p class="text-xs text-slate-400">Aggregated device, browser, operating system and referrer statistics</p>
+        </div>
+        <button onclick="loadAnalyticsData()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center space-x-1">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          <span>Refresh Analytics</span>
+        </button>
+      </div>
+
+      <!-- Charts Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Device Breakdown -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+          <h3 class="text-sm font-bold text-white mb-2 flex items-center space-x-2">
+            <i data-lucide="smartphone" class="w-4 h-4 text-indigo-400"></i>
+            <span>Device Types</span>
+          </h3>
+          <div class="h-52 relative">
+            <canvas id="deviceChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Operating Systems -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+          <h3 class="text-sm font-bold text-white mb-2 flex items-center space-x-2">
+            <i data-lucide="cpu" class="w-4 h-4 text-emerald-400"></i>
+            <span>Operating Systems</span>
+          </h3>
+          <div class="h-52 relative">
+            <canvas id="osChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Browsers -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+          <h3 class="text-sm font-bold text-white mb-2 flex items-center space-x-2">
+            <i data-lucide="compass" class="w-4 h-4 text-amber-400"></i>
+            <span>Top Browsers</span>
+          </h3>
+          <div class="h-52 relative">
+            <canvas id="browserChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Referrers & Scan Log -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Referrers List -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+          <h3 class="text-sm font-bold text-white mb-3 flex items-center space-x-2">
+            <i data-lucide="link-2" class="w-4 h-4 text-indigo-400"></i>
+            <span>Referral Sources</span>
+          </h3>
+          <div id="referrers-list" class="space-y-2 text-xs">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- Full Scan Log -->
+        <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+          <h3 class="text-sm font-bold text-white mb-3 flex items-center space-x-2">
+            <i data-lucide="file-text" class="w-4 h-4 text-slate-400"></i>
+            <span>Detailed Audit Log</span>
+          </h3>
+          <div class="overflow-x-auto max-h-72 overflow-y-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="text-slate-400 border-b border-slate-800 sticky top-0 bg-slate-900 text-[10px] uppercase">
+                <tr>
+                  <th class="py-2 px-3">Date & Time</th>
+                  <th class="py-2 px-3">Slug</th>
+                  <th class="py-2 px-3">Device / OS</th>
+                  <th class="py-2 px-3">Browser</th>
+                  <th class="py-2 px-3">Source</th>
+                </tr>
+              </thead>
+              <tbody id="analytics-scans-table" class="divide-y divide-slate-800/60 font-mono text-slate-300">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 6: SETTINGS & CONFIGURATION            -->
+    <!-- ========================================== -->
+    <section id="tab-settings" class="tab-content hidden max-w-3xl space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
+        <div class="border-b border-slate-800 pb-4">
+          <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+            <i data-lucide="settings" class="w-5 h-5 text-indigo-400"></i>
+            <span>System Settings</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">Configure redirection domain, app branding, and administrative access control</p>
+        </div>
+
+        <form id="settings-form" onsubmit="handleSaveSettings(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Base Redirection URL / Domain</label>
+            <input type="text" id="settings-baseurl" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+            <p class="text-[11px] text-slate-400 mt-1">All newly encoded QR codes will point to <code class="text-indigo-300 font-mono">[Base URL]/r/[slug]</code>.</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Studio Name</label>
+            <input type="text" id="settings-appname" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div class="p-4 bg-slate-800/40 border border-slate-800 rounded-xl space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-xs font-bold text-white block">Admin API Key Protection</span>
+                <span class="text-[11px] text-slate-400">Require x-admin-key header for modifications</span>
+              </div>
+              <input type="checkbox" id="settings-admin-protection" class="w-4 h-4 text-indigo-600 rounded bg-slate-800 border-slate-700">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Admin Key</label>
+              <input type="password" id="settings-admin-key" placeholder="Enter new admin key" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+            </div>
+          </div>
+
+          <button type="submit" class="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md transition-all">
+            Save Settings
+          </button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- MODAL: EDIT QR CODE                        -->
+  <!-- ========================================== -->
+  <div id="modal-edit-qr" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center space-x-2">
+          <i data-lucide="edit-3" class="w-4 h-4 text-indigo-400"></i>
+          <span>Edit Dynamic QR Code</span>
+        </h3>
+        <button onclick="closeModal('modal-edit-qr')" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="edit-qr-form" onsubmit="handleUpdateQR(event)" class="space-y-4">
+        <input type="hidden" id="edit-qr-id">
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Campaign Title</label>
+          <input type="text" id="edit-qr-title" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Destination URL (Instant dynamic redirect update)</label>
+          <input type="text" id="edit-qr-destination" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <p class="text-[11px] text-emerald-400 mt-1">Changes take effect immediately without needing to reprint the QR code.</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Status</label>
+            <select id="edit-qr-active" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white">
+              <option value="true">Active (Live Redirection)</option>
+              <option value="false">Paused (Show Maintenance Notice)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Tags</label>
+            <input type="text" id="edit-qr-tags" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white">
+          </div>
+        </div>
+
+        <div class="flex justify-end space-x-2 pt-2 border-t border-slate-800">
+          <button type="button" onclick="closeModal('modal-edit-qr')" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: DEEP QR ANALYTICS                   -->
+  <!-- ========================================== -->
+  <div id="modal-analytics-qr" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h3 id="modal-analytics-title" class="text-base font-bold text-white">QR Code Analytics</h3>
+          <p id="modal-analytics-slug" class="text-xs font-mono text-indigo-400">/r/slug</p>
+        </div>
+        <button onclick="closeModal('modal-analytics-qr')" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Quick Metrics -->
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-slate-800/60 p-3 rounded-xl text-center">
+          <span class="text-[10px] uppercase text-slate-400 font-semibold">Total Scans</span>
+          <div id="modal-qr-total-scans" class="text-2xl font-extrabold text-white">0</div>
+        </div>
+        <div class="bg-slate-800/60 p-3 rounded-xl text-center">
+          <span class="text-[10px] uppercase text-slate-400 font-semibold">Unique Visitors</span>
+          <div id="modal-qr-unique" class="text-2xl font-extrabold text-emerald-400">0</div>
+        </div>
+        <div class="bg-slate-800/60 p-3 rounded-xl text-center">
+          <span class="text-[10px] uppercase text-slate-400 font-semibold">Created Date</span>
+          <div id="modal-qr-created" class="text-xs font-mono text-slate-300 mt-2">-</div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
+        <h4 class="text-xs font-bold text-slate-300 mb-2">Scans Timeline</h4>
+        <div class="h-44 relative">
+          <canvas id="modalQRChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Recent Scans for this QR -->
+      <div>
+        <h4 class="text-xs font-bold text-slate-300 mb-2">Recent Scans Log</h4>
+        <div class="max-h-48 overflow-y-auto border border-slate-800 rounded-xl">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="bg-slate-800/60 text-slate-400 text-[10px] uppercase">
+              <tr>
+                <th class="py-2 px-3">Timestamp</th>
+                <th class="py-2 px-3">Device</th>
+                <th class="py-2 px-3">Browser</th>
+                <th class="py-2 px-3">OS</th>
+                <th class="py-2 px-3">Referrer</th>
+              </tr>
+            </thead>
+            <tbody id="modal-qr-scans-table" class="divide-y divide-slate-800/60 text-slate-300">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- App JavaScript -->
+  <script src="/js/app.js"></script>
+</body>
+</html>
