@@ -1,10 +1,13 @@
 const app = require('./src/server');
 
-// Initialize database immediately on startup
-if (app.bootstrap) {
-  app.bootstrap(false).catch(err => {
-    console.error('[Serverless Init] Bootstrap error:', err.message);
-  });
-}
-
-module.exports = app;
+module.exports = async (req, res) => {
+  try {
+    if (app.bootstrap) {
+      await app.bootstrap(false);
+    }
+    return app(req, res);
+  } catch (err) {
+    console.error('[Root Handler Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+};
