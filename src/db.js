@@ -94,6 +94,12 @@ class Database {
   constructor() {
     this.initialized = false;
     this._mem = null;   // set only when running without MONGODB_URI
+    this._cachedSettings = {
+      baseUrl: BASE_URL,
+      appName: 'Dynamic QR Studio',
+      adminProtection: false,
+      adminKey: 'admin123',
+    };
   }
 
   // ── init ─────────────────────────────────────────────────────────────────
@@ -114,6 +120,30 @@ class Database {
       const db = await getDB();
       const count = await db.collection('qrcodes').countDocuments();
       console.log(`[Database] Connected to MongoDB. ${count} QR code(s) in collection.`);
+
+      // Sync and cache settings
+      const doc = await db.collection('settings').findOne({ _id: 'global' });
+      if (doc) {
+        this._cachedSettings = { ...this._cachedSettings, ...doc };
+        // If stored baseUrl contains localhost or is empty, but production URL is set, upgrade it
+        const isStoredLocal = !this._cachedSettings.baseUrl || this._cachedSettings.baseUrl.includes('localhost');
+        const hasProdEnv = Boolean(process.env.BASE_URL || process.env.RENDER_EXTERNAL_URL || process.env.VERCEL_URL);
+        if (isStoredLocal && hasProdEnv) {
+          console.log(`[Database] Upgrading stored baseUrl from '${this._cachedSettings.baseUrl}' to production '${BASE_URL}'`);
+          this._cachedSettings.baseUrl = BASE_URL;
+          await db.collection('settings').updateOne(
+            { _id: 'global' },
+            { $set: { baseUrl: BASE_URL } }
+          );
+        }
+      } else {
+        await db.collection('settings').updateOne(
+          { _id: 'global' },
+          { $set: this._cachedSettings },
+          { upsert: true }
+        );
+      }
+
       this.initialized = true;
     } catch (err) {
       console.error('[Database] MongoDB connection failed:', err.message);
@@ -429,36 +459,22 @@ class Database {
   // ── Settings ──────────────────────────────────────────────────────────────
   getSettings() {
     if (this._mem) return { ...this._mem.settings };
-    return this._getSettingsAsync();
+    return { ...this._cachedSettings };
   }
 
-  async _getSettingsAsync() {
-    const db = await getDB();
-    const doc = await db.collection('settings').findOne({ _id: 'global' });
-    return doc || {
-      baseUrl: BASE_URL,
-      appName: 'Dynamic QR Studio',
-      adminProtection: false,
-      adminKey: 'admin123',
-    };
-  }
-
-  updateSettings(updates) {
+  async updateSettings(updates) {
     if (this._mem) {
       this._mem.settings = { ...this._mem.settings, ...updates };
       return this._mem.settings;
     }
-    return this._updateSettingsAsync(updates);
-  }
-
-  async _updateSettingsAsync(updates) {
     const db = await getDB();
-    const result = await db.collection('settings').findOneAndUpdate(
+    await db.collection('settings').updateOne(
       { _id: 'global' },
       { $set: updates },
-      { upsert: true, returnDocument: 'after' },
+      { upsert: true }
     );
-    return result;
+    this._cachedSettings = { ...this._cachedSettings, ...updates };
+    return { ...this._cachedSettings };
   }
 
   // ── Overview Stats ────────────────────────────────────────────────────────

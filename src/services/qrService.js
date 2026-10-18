@@ -1,5 +1,6 @@
 const QRCode = require('qrcode');
 const db = require('../db');
+const { BASE_URL } = require('../config');
 
 class QRService {
   /**
@@ -7,7 +8,7 @@ class QRService {
    */
   getEncodedUrl(slug, overrideBaseUrl) {
     const settings = db.getSettings();
-    const base = (overrideBaseUrl || settings.baseUrl || 'http://localhost:3000').replace(/\/+$/, '');
+    const base = (overrideBaseUrl || settings?.baseUrl || BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
     return `${base}/r/${slug}`;
   }
 

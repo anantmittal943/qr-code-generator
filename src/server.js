@@ -8,6 +8,7 @@ const apiRouter = require('./routes/api');
 const redirectRouter = require('./routes/redirect');
 
 const app = express();
+app.set('trust proxy', 1);
 
 // ─── Core Middlewares ────────────────────────────────────────────────────────
 app.use(cors());

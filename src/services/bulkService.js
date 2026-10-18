@@ -125,7 +125,7 @@ class BulkService {
   /**
    * Exports QR codes to a ZIP archive stream (async)
    */
-  async streamZipArchive(res, { qrIds, format = 'all' } = {}) {
+  async streamZipArchive(res, { qrIds, format = 'all', baseUrl } = {}) {
     let list;
     if (Array.isArray(qrIds) && qrIds.length > 0) {
       list = (await Promise.all(qrIds.map(id => db.getQRCodeById(id)))).filter(Boolean);
@@ -149,7 +149,7 @@ class BulkService {
     // Add metadata summary CSV
     const csvRows = ['ID,Title,Slug,Short_URL,Destination_URL,Total_Scans,Unique_Visitors,Active,Created_At'];
     for (const qr of list) {
-      const shortUrl = qrService.getEncodedUrl(qr.slug);
+      const shortUrl = qrService.getEncodedUrl(qr.slug, baseUrl);
       csvRows.push([
         `"${qr.id}"`,
         `"${(qr.title || '').replace(/"/g, '""')}"`,
@@ -166,7 +166,7 @@ class BulkService {
 
     // Add QR code images
     for (const qr of list) {
-      const shortUrl = qrService.getEncodedUrl(qr.slug);
+      const shortUrl = qrService.getEncodedUrl(qr.slug, baseUrl);
       const safeTitle = (qr.title || qr.slug).replace(/[^a-z0-9_-]/gi, '_').slice(0, 30);
       const baseFilename = `${qr.slug}-${safeTitle}`;
 
@@ -198,11 +198,11 @@ class BulkService {
   /**
    * Generates a CSV string of all QR codes (async)
    */
-  async generateCSV() {
+  async generateCSV(baseUrl) {
     const list = (await db.getQRCodes()).items;
     const csvRows = ['ID,Title,Slug,Short_URL,Destination_URL,Total_Scans,Unique_Visitors,Active,Created_At,Last_Scanned_At'];
     for (const qr of list) {
-      const shortUrl = qrService.getEncodedUrl(qr.slug);
+      const shortUrl = qrService.getEncodedUrl(qr.slug, baseUrl);
       csvRows.push([
         `"${qr.id}"`,
         `"${(qr.title || '').replace(/"/g, '""')}"`,

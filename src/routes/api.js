@@ -14,6 +14,23 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
+/**
+ * Resolves the effective base URL for QR codes.
+ * Prioritizes stored production settings, then the incoming request host (Render/Vercel),
+ * and finally falls back to default settings.
+ */
+function resolveBaseUrl(req) {
+  const settings = db.getSettings();
+  if (settings && settings.baseUrl && !settings.baseUrl.includes('localhost')) {
+    return settings.baseUrl;
+  }
+  const host = req.get('host');
+  if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+    return `${req.protocol}://${host}`;
+  }
+  return settings?.baseUrl || null;
+}
+
 // Admin authentication middleware (optional, enabled via settings)
 async function adminAuthMiddleware(req, res, next) {
   try {
@@ -52,6 +69,7 @@ router.get('/qr', async (req, res) => {
   try {
     const { search, tag, active, sort, order, page = 1, limit = 20 } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
+    const reqBase = resolveBaseUrl(req);
 
     let parsedActive;
     if (active === 'true') parsedActive = true;
@@ -73,7 +91,7 @@ router.get('/qr', async (req, res) => {
       limit: Number(limit),
       items: result.items.map(qr => ({
         ...qr,
-        shortUrl: qrService.getEncodedUrl(qr.slug)
+        shortUrl: qrService.getEncodedUrl(qr.slug, reqBase)
       }))
     });
   } catch (err) {
@@ -84,6 +102,7 @@ router.get('/qr', async (req, res) => {
 router.post('/qr', async (req, res) => {
   try {
     const { destinationUrl, title, slug, tags, style, expiresAt, active } = req.body;
+    const reqBase = resolveBaseUrl(req);
 
     if (!destinationUrl) {
       return res.status(400).json({ error: 'destinationUrl is required.' });
@@ -106,7 +125,7 @@ router.post('/qr', async (req, res) => {
 
     res.status(201).json({
       ...qr,
-      shortUrl: qrService.getEncodedUrl(qr.slug)
+      shortUrl: qrService.getEncodedUrl(qr.slug, reqBase)
     });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -121,7 +140,7 @@ router.get('/qr/:id', async (req, res) => {
     }
     res.json({
       ...qr,
-      shortUrl: qrService.getEncodedUrl(qr.slug)
+      shortUrl: qrService.getEncodedUrl(qr.slug, resolveBaseUrl(req))
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -146,7 +165,7 @@ router.put('/qr/:id', async (req, res) => {
 
     res.json({
       ...updated,
-      shortUrl: qrService.getEncodedUrl(updated.slug)
+      shortUrl: qrService.getEncodedUrl(updated.slug, resolveBaseUrl(req))
     });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -173,7 +192,7 @@ router.get('/qr/:id/preview', async (req, res) => {
     if (!qr) return res.status(404).send('Not Found');
 
     const format = (req.query.format || 'png').toLowerCase();
-    const shortUrl = qrService.getEncodedUrl(qr.slug);
+    const shortUrl = qrService.getEncodedUrl(qr.slug, resolveBaseUrl(req));
     const style = {
       ...qr.style,
       width: req.query.size ? Number(req.query.size) : 300,
@@ -201,7 +220,7 @@ router.get('/qr/:id/download', async (req, res) => {
 
     const format = (req.query.format || 'png').toLowerCase();
     const size = req.query.size ? Number(req.query.size) : 1024;
-    const shortUrl = qrService.getEncodedUrl(qr.slug);
+    const shortUrl = qrService.getEncodedUrl(qr.slug, resolveBaseUrl(req));
     const safeTitle = (qr.title || qr.slug).replace(/[^a-z0-9_-]/gi, '_');
     const filename = `${qr.slug}-${safeTitle}.${format}`;
 
@@ -319,7 +338,7 @@ router.get('/bulk/export', async (req, res) => {
   try {
     const format = req.query.format || 'all';
     const ids = req.query.ids ? req.query.ids.split(',') : null;
-    await bulkService.streamZipArchive(res, { qrIds: ids, format });
+    await bulkService.streamZipArchive(res, { qrIds: ids, format, baseUrl: resolveBaseUrl(req) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -327,7 +346,7 @@ router.get('/bulk/export', async (req, res) => {
 
 router.get('/bulk/export-csv', async (req, res) => {
   try {
-    const csvContent = await bulkService.generateCSV();
+    const csvContent = await bulkService.generateCSV(resolveBaseUrl(req));
     res.attachment(`qr-codes-${Date.now()}.csv`);
     res.setHeader('Content-Type', 'text/csv');
     res.send(csvContent);
@@ -341,8 +360,11 @@ router.get('/bulk/export-csv', async (req, res) => {
 router.get('/settings', async (req, res) => {
   try {
     const current = await db.getSettings();
+    const effectiveBaseUrl = (current.baseUrl && !current.baseUrl.includes('localhost'))
+      ? current.baseUrl
+      : (resolveBaseUrl(req) || current.baseUrl);
     res.json({
-      baseUrl: current.baseUrl,
+      baseUrl: effectiveBaseUrl,
       appName: current.appName,
       adminProtection: current.adminProtection
     });
