@@ -36,9 +36,27 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
+// Lazy database initialization for serverless environments (like Vercel)
+let initPromise = null;
+function ensureInitialized() {
+  if (!initPromise) {
+    initPromise = db.init();
+  }
+  return initPromise;
+}
+
+app.use(async (req, res, next) => {
+  try {
+    await ensureInitialized();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Bootstrap & Seed Initial Data if empty
-async function bootstrap() {
-  await db.init();
+async function bootstrap(startListener = true) {
+  await ensureInitialized();
 
   const { total } = db.getQRCodes();
   if (total === 0) {
@@ -67,7 +85,6 @@ async function bootstrap() {
       style: { fgColor: '#7c3aed', bgColor: '#ffffff', errorCorrectionLevel: 'M' }
     });
 
-    // Seed some initial scans for realistic analytics charts
     const seedScans = [
       { device: 'mobile', browser: 'Safari', os: 'iOS', referrer: 'instagram.com' },
       { device: 'mobile', browser: 'Chrome Mobile', os: 'Android', referrer: 'Direct' },
@@ -93,6 +110,10 @@ async function bootstrap() {
     }
   }
 
+  if (!startListener) {
+    return null;
+  }
+
   const server = app.listen(PORT, () => {
     console.log(`=======================================================`);
     console.log(`🚀 Dynamic QR Code Generator Server is live!`);
@@ -106,7 +127,9 @@ async function bootstrap() {
 }
 
 if (require.main === module) {
-  bootstrap();
+  bootstrap(true);
 }
 
-module.exports = { app, bootstrap };
+module.exports = app;
+module.exports.app = app;
+module.exports.bootstrap = bootstrap;

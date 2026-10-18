@@ -178,5 +178,47 @@
     "lastScannedAt": null,
     "createdAt": "2026-10-18T10:11:44.863Z",
     "updatedAt": "2026-10-18T10:11:44.863Z"
+  },
+  {
+    "id": "ee012fdc-dc49-45c6-9d10-3d6b989609ff",
+    "slug": "bulk1-e8fi",
+    "title": "Bulk Campaign 1",
+    "destinationUrl": "https://site1.com",
+    "active": true,
+    "tags": [],
+    "style": {
+      "fgColor": "#000000",
+      "bgColor": "#ffffff",
+      "errorCorrectionLevel": "M",
+      "margin": 2,
+      "dotStyle": "square"
+    },
+    "expiresAt": null,
+    "totalScans": 0,
+    "uniqueVisitors": 0,
+    "lastScannedAt": null,
+    "createdAt": "2026-10-18T10:33:49.013Z",
+    "updatedAt": "2026-10-18T10:33:49.013Z"
+  },
+  {
+    "id": "5a152551-cb5b-42b1-aee6-896a79f45c99",
+    "slug": "bulk2-xoip",
+    "title": "Bulk Campaign 2",
+    "destinationUrl": "https://site2.com",
+    "active": true,
+    "tags": [],
+    "style": {
+      "fgColor": "#000000",
+      "bgColor": "#ffffff",
+      "errorCorrectionLevel": "M",
+      "margin": 2,
+      "dotStyle": "square"
+    },
+    "expiresAt": null,
+    "totalScans": 0,
+    "uniqueVisitors": 0,
+    "lastScannedAt": null,
+    "createdAt": "2026-10-18T10:33:49.015Z",
+    "updatedAt": "2026-10-18T10:33:49.015Z"
   }
 ]

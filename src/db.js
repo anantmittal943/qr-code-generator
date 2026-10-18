@@ -31,6 +31,22 @@ class Database {
       fs.mkdirSync(this.dataDir, { recursive: true });
     }
 
+    // On serverless environments (like Vercel), copy seed templates to /tmp/data if missing
+    const bundledDir = path.join(__dirname, '..', 'data');
+    if (this.dataDir !== bundledDir && fs.existsSync(bundledDir)) {
+      ['qrcodes.json', 'scans.json', 'settings.json'].forEach(file => {
+        const target = path.join(this.dataDir, file);
+        const source = path.join(bundledDir, file);
+        if (!fs.existsSync(target) && fs.existsSync(source)) {
+          try {
+            fs.copyFileSync(source, target);
+          } catch (e) {
+            console.warn('[Database] Seed copy warning:', e.message);
+          }
+        }
+      });
+    }
+
     this.qrCodes = this._loadFile(this.qrCodesFile, []);
     this.scans = this._loadFile(this.scansFile, []);
     this.settings = this._loadFile(this.settingsFile, this.settings);
