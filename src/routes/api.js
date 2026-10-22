@@ -5,6 +5,7 @@ const { Readable } = require('stream');
 const router = express.Router();
 
 const db = require('../db');
+const { BASE_URL } = require('../config');
 const qrService = require('../services/qrService');
 const analyticsService = require('../services/analyticsService');
 const bulkService = require('../services/bulkService');
@@ -16,19 +17,60 @@ const upload = multer({
 
 /**
  * Resolves the effective base URL for QR codes.
- * Prioritizes stored production settings, then the incoming request host (Render/Vercel),
- * and finally falls back to default settings.
+ *
+ * Priority order:
+ * 1. Explicit user-configured custom base URL from Settings UI (customBaseUrl flag).
+ * 2. Explicit environment variable BASE_URL (process.env.BASE_URL).
+ * 3. Dynamic incoming request host detection (respecting reverse proxies: x-forwarded-host/proto).
+ * 4. Production hosting environment URL (RENDER_EXTERNAL_URL / VERCEL_URL).
+ * 5. Stored settings baseUrl (if not localhost).
+ * 6. Incoming request for local development (http://localhost:PORT).
+ * 7. Configured BASE_URL or local default fallback.
  */
 function resolveBaseUrl(req) {
   const settings = db.getSettings();
-  if (settings && settings.baseUrl && !settings.baseUrl.includes('localhost')) {
-    return settings.baseUrl;
+
+  // 1. Explicit user-configured custom base URL from Settings UI
+  if (settings && settings.customBaseUrl && settings.baseUrl) {
+    return settings.baseUrl.replace(/\/+$/, '');
   }
-  const host = req.get('host');
-  if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
-    return `${req.protocol}://${host}`;
+
+  // 2. Explicit environment variable BASE_URL
+  if (process.env.BASE_URL && !process.env.BASE_URL.includes('localhost') && !process.env.BASE_URL.includes('127.0.0.1')) {
+    return process.env.BASE_URL.replace(/\/+$/, '');
   }
-  return settings?.baseUrl || null;
+
+  // 3. Dynamic incoming request host detection (handles custom domains & new deployments automatically)
+  if (req) {
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+    const host = req.get('x-forwarded-host') || req.get('host');
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      return `${proto}://${host}`.replace(/\/+$/, '');
+    }
+  }
+
+  // 4. Hosting environment URL
+  const hostingEnvUrl = process.env.RENDER_EXTERNAL_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
+  if (hostingEnvUrl) {
+    return hostingEnvUrl.replace(/\/+$/, '');
+  }
+
+  // 5. Stored settings baseUrl if not localhost
+  if (settings && settings.baseUrl && !settings.baseUrl.includes('localhost') && !settings.baseUrl.includes('127.0.0.1')) {
+    return settings.baseUrl.replace(/\/+$/, '');
+  }
+
+  // 6. Incoming request for local development
+  if (req) {
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+    const host = req.get('x-forwarded-host') || req.get('host');
+    if (host) {
+      return `${proto}://${host}`.replace(/\/+$/, '');
+    }
+  }
+
+  // 7. Configured BASE_URL or local default
+  return (settings?.baseUrl || BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
 }
 
 // Admin authentication middleware (optional, enabled via settings)
@@ -318,7 +360,8 @@ router.post('/bulk/create', async (req, res) => {
       return res.status(400).json({ error: 'No items found to process.' });
     }
 
-    const result = await bulkService.processBulkCreation(listToProcess);
+    const reqBase = resolveBaseUrl(req);
+    const result = await bulkService.processBulkCreation(listToProcess, reqBase);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -338,7 +381,8 @@ router.post('/bulk/upload', upload.single('file'), async (req, res) => {
     .on('data', data => rows.push(data))
     .on('end', async () => {
       try {
-        const result = await bulkService.processBulkCreation(rows);
+        const reqBase = resolveBaseUrl(req);
+        const result = await bulkService.processBulkCreation(rows, reqBase);
         res.json(result);
       } catch (err) {
         res.status(500).json({ error: err.message });
@@ -375,13 +419,12 @@ router.get('/bulk/export-csv', async (req, res) => {
 router.get('/settings', async (req, res) => {
   try {
     const current = await db.getSettings();
-    const effectiveBaseUrl = (current.baseUrl && !current.baseUrl.includes('localhost'))
-      ? current.baseUrl
-      : (resolveBaseUrl(req) || current.baseUrl);
+    const effectiveBaseUrl = resolveBaseUrl(req);
     res.json({
-      baseUrl: effectiveBaseUrl,
+      baseUrl: (current.customBaseUrl && current.baseUrl) ? current.baseUrl : effectiveBaseUrl,
       appName: current.appName,
-      adminProtection: current.adminProtection
+      adminProtection: current.adminProtection,
+      customBaseUrl: Boolean(current.customBaseUrl)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -392,16 +435,22 @@ router.put('/settings', async (req, res) => {
   try {
     const { baseUrl, appName, adminProtection, adminKey } = req.body;
     const updates = {};
-    if (baseUrl !== undefined) updates.baseUrl = baseUrl.replace(/\/+$/, '');
+    if (baseUrl !== undefined) {
+      const trimmed = baseUrl.trim().replace(/\/+$/, '');
+      updates.baseUrl = trimmed;
+      updates.customBaseUrl = Boolean(trimmed);
+    }
     if (appName !== undefined) updates.appName = appName;
     if (adminProtection !== undefined) updates.adminProtection = Boolean(adminProtection);
     if (adminKey !== undefined && adminKey.trim()) updates.adminKey = adminKey.trim();
 
     const saved = await db.updateSettings(updates);
+    const effectiveBaseUrl = resolveBaseUrl(req);
     res.json({
-      baseUrl: saved.baseUrl,
+      baseUrl: (saved.customBaseUrl && saved.baseUrl) ? saved.baseUrl : effectiveBaseUrl,
       appName: saved.appName,
       adminProtection: saved.adminProtection,
+      customBaseUrl: Boolean(saved.customBaseUrl),
       message: 'Settings updated successfully.'
     });
   } catch (err) {

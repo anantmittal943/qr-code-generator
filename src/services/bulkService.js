@@ -23,7 +23,7 @@ class BulkService {
   /**
    * Processes a list of items for bulk creation (async)
    */
-  async processBulkCreation(items) {
+  async processBulkCreation(items, baseUrl) {
     const results = {
       total: items.length,
       successCount: 0,
@@ -72,7 +72,10 @@ class BulkService {
           }
         });
         results.successCount++;
-        results.created.push(qr);
+        results.created.push({
+          ...qr,
+          shortUrl: qrService.getEncodedUrl(qr.slug, baseUrl)
+        });
       } catch (err) {
         results.failedCount++;
         results.errors.push({

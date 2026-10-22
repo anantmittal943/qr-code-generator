@@ -5,6 +5,7 @@ let qrPage = 1;
 const qrLimit = 10;
 let searchDebounceTimer = null;
 let previewDebounceTimer = null;
+let appBaseUrl = window.location.origin;
 
 // Chart Instances
 let overviewChartInstance = null;
@@ -13,11 +14,27 @@ let osChartInstance = null;
 let browserChartInstance = null;
 let modalChartInstance = null;
 
+async function initAppSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.baseUrl) {
+        appBaseUrl = data.baseUrl.replace(/\/+$/, '');
+        updateLivePreview();
+      }
+    }
+  } catch (err) {
+    console.warn('Could not load settings on init:', err);
+  }
+}
+
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
   if (window.lucide) {
     lucide.createIcons();
   }
+  initAppSettings();
   loadOverviewData();
   updateLivePreview();
 });
@@ -247,8 +264,9 @@ async function loadQRCodesList() {
       return;
     }
 
+    const defaultBase = (appBaseUrl || window.location.origin).replace(/\/+$/, '');
     container.innerHTML = data.items.map(qr => {
-      const shortUrl = qr.shortUrl || `${window.location.origin}/r/${qr.slug}`;
+      const shortUrl = qr.shortUrl || `${defaultBase}/r/${qr.slug}`;
       const isActive = qr.active !== false;
       const isExpired = Boolean(qr.expiresAt && new Date(qr.expiresAt).getTime() <= Date.now());
 
@@ -359,7 +377,8 @@ function updateLivePreview() {
     if (document.getElementById('create-fg-hex')) document.getElementById('create-fg-hex').value = fg;
     if (document.getElementById('create-bg-hex')) document.getElementById('create-bg-hex').value = bg;
 
-    const encodedUrl = `${window.location.origin}/r/${slug}`;
+    const base = (appBaseUrl || window.location.origin).replace(/\/+$/, '');
+    const encodedUrl = `${base}/r/${slug}`;
     const previewUrl = `/api/preview-custom?text=${encodeURIComponent(encodedUrl)}&fgColor=${encodeURIComponent(fg)}&bgColor=${encodeURIComponent(bg)}&errorCorrectionLevel=${ecl}`;
 
     const img = document.getElementById('live-qr-preview-img');
@@ -670,11 +689,14 @@ function showBulkResults(results) {
   box.classList.remove('hidden');
   title.innerText = `Successfully Generated ${results.successCount} of ${results.total} QR Codes`;
 
-  list.innerHTML = results.created.map(qr => `
+  const base = (appBaseUrl || window.location.origin).replace(/\/+$/, '');
+  list.innerHTML = results.created.map(qr => {
+    const shortUrl = qr.shortUrl || `${base}/r/${qr.slug}`;
+    return `
     <div class="flex items-center justify-between p-2 rounded-lg bg-slate-800/80 border border-slate-700">
       <div class="truncate pr-2">
         <span class="font-bold text-white">${escapeHtml(qr.title)}</span>
-        <span class="text-indigo-400 font-mono ml-2">/r/${qr.slug}</span>
+        <span class="text-indigo-400 font-mono ml-2">${shortUrl}</span>
         <span class="text-slate-400 text-[10px] ml-2">&rarr; ${escapeHtml(qr.destinationUrl)}</span>
       </div>
       <div class="flex space-x-1 shrink-0">
@@ -682,7 +704,8 @@ function showBulkResults(results) {
         <a href="/api/qr/${qr.id}/download?format=svg" class="px-2 py-0.5 rounded bg-slate-700 text-slate-200 font-bold text-[10px]">SVG</a>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   showToast(`Bulk generation complete: ${results.successCount} QR codes created!`, 'success');
   if (window.lucide) lucide.createIcons();
@@ -824,6 +847,9 @@ async function loadSettings() {
     if (!res.ok) throw new Error('Failed to fetch settings');
     const data = await res.json();
 
+    if (data.baseUrl) {
+      appBaseUrl = data.baseUrl.replace(/\/+$/, '');
+    }
     document.getElementById('settings-baseurl').value = data.baseUrl || window.location.origin;
     document.getElementById('settings-appname').value = data.appName || 'Dynamic QR Studio';
     document.getElementById('settings-admin-protection').checked = Boolean(data.adminProtection);
@@ -847,6 +873,12 @@ async function handleSaveSettings(e) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to save settings');
+    if (data.baseUrl) {
+      appBaseUrl = data.baseUrl.replace(/\/+$/, '');
+    } else if (baseUrl) {
+      appBaseUrl = baseUrl.replace(/\/+$/, '');
+    }
+    updateLivePreview();
     showToast('Settings updated successfully', 'success');
   } catch (err) {
     showToast(err.message, 'error');

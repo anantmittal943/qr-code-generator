@@ -155,7 +155,56 @@ async function runTests() {
     console.log(`[Test 15] DELETE test QR: status=${delRes.statusCode}`);
     if (delRes.statusCode !== 200) throw new Error('Delete failed');
 
-    console.log('\n✅ ALL 15 AUTOMATED TESTS PASSED SUCCESSFULLY! Campaign expiration and all features verified.\n');
+    // 12. Test Dynamic Domain Detection (Host / x-forwarded headers)
+    const dynamicDomainRes = await request('/api/qr', {
+      headers: {
+        'x-forwarded-host': 'my-new-domain.com',
+        'x-forwarded-proto': 'https'
+      }
+    });
+    console.log(`[Test 16] GET /api/qr with new domain host header: status=${dynamicDomainRes.statusCode}`);
+    const dynamicQRs = dynamicDomainRes.json();
+    if (dynamicQRs.items.length > 0) {
+      const itemUrl = dynamicQRs.items[0].shortUrl;
+      console.log(`         Resolved shortUrl: ${itemUrl}`);
+      if (!itemUrl.startsWith('https://my-new-domain.com/r/')) {
+        throw new Error(`Expected shortUrl to start with https://my-new-domain.com/r/, got ${itemUrl}`);
+      }
+
+      // Verify SVG preview generates with the new domain
+      const dynamicSvgRes = await request(`/api/qr/${dynamicQRs.items[0].id}/preview?format=svg`, {
+        headers: {
+          'x-forwarded-host': 'my-new-domain.com',
+          'x-forwarded-proto': 'https'
+        }
+      });
+      if (!dynamicSvgRes.text().includes('svg')) {
+        throw new Error('Dynamic SVG preview failed');
+      }
+    }
+
+    // 13. Test Settings Custom Base URL Update
+    const customBaseUrl = 'https://custom-shortlink.example.com';
+    const putSettingsRes = await request('/api/settings', { method: 'PUT' }, {
+      baseUrl: customBaseUrl
+    });
+    console.log(`[Test 17] PUT /api/settings custom baseUrl: status=${putSettingsRes.statusCode}`);
+    if (putSettingsRes.statusCode !== 200) throw new Error('Failed to update settings');
+    const settingsData = putSettingsRes.json();
+    if (settingsData.baseUrl !== customBaseUrl) {
+      throw new Error(`Expected settings baseUrl to be ${customBaseUrl}, got ${settingsData.baseUrl}`);
+    }
+
+    const qrListAfterSettings = (await request('/api/qr')).json();
+    if (qrListAfterSettings.items.length > 0) {
+      const updatedUrl = qrListAfterSettings.items[0].shortUrl;
+      console.log(`         Verified shortUrl after settings update: ${updatedUrl}`);
+      if (!updatedUrl.startsWith(`${customBaseUrl}/r/`)) {
+        throw new Error(`Expected shortUrl to start with ${customBaseUrl}/r/, got ${updatedUrl}`);
+      }
+    }
+
+    console.log('\n✅ ALL 17 AUTOMATED TESTS PASSED SUCCESSFULLY! Dynamic domain resolution and baseUrl verified.\n');
   } catch (err) {
     console.error('❌ Test failed:', err);
     process.exit(1);

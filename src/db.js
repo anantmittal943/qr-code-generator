@@ -125,10 +125,16 @@ class Database {
       const doc = await db.collection('settings').findOne({ _id: 'global' });
       if (doc) {
         this._cachedSettings = { ...this._cachedSettings, ...doc };
-        // If stored baseUrl contains localhost or is empty, but production URL is set, upgrade it
-        const isStoredLocal = !this._cachedSettings.baseUrl || this._cachedSettings.baseUrl.includes('localhost');
+        // If stored baseUrl contains localhost or is empty, or if production URL changed and customBaseUrl is not locked
+        const isStoredLocal = !this._cachedSettings.baseUrl || this._cachedSettings.baseUrl.includes('localhost') || this._cachedSettings.baseUrl.includes('127.0.0.1');
         const hasProdEnv = Boolean(process.env.BASE_URL || process.env.RENDER_EXTERNAL_URL || process.env.VERCEL_URL);
-        if (isStoredLocal && hasProdEnv) {
+        const shouldUpgrade = hasProdEnv && (
+          isStoredLocal ||
+          (!doc.customBaseUrl && process.env.BASE_URL && this._cachedSettings.baseUrl !== BASE_URL) ||
+          (!doc.customBaseUrl && (process.env.RENDER_EXTERNAL_URL || process.env.VERCEL_URL) && this._cachedSettings.baseUrl !== BASE_URL)
+        );
+
+        if (shouldUpgrade) {
           console.log(`[Database] Upgrading stored baseUrl from '${this._cachedSettings.baseUrl}' to production '${BASE_URL}'`);
           this._cachedSettings.baseUrl = BASE_URL;
           await db.collection('settings').updateOne(
